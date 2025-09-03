@@ -22,4 +22,12 @@ mod circuits {
         let v = response_ctxt.to_arcis();
         response_ctxt.owner.from_arcis(v)
     }
+
+    // New confidential instruction for creating surveys
+    #[instruction]
+    pub fn create_survey(survey_metadata_ctxt: Enc<Shared, u64>) -> Enc<Shared, u64> {
+        let metadata = survey_metadata_ctxt.to_arcis();
+        // Return the metadata as-is for now (could add validation/computation here)
+        survey_metadata_ctxt.owner.from_arcis(metadata)
+    }
 }

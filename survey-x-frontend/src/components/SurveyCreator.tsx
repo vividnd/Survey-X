@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { createSurveyEncrypted } from '@/lib/surveyArcium';
 
 const surveySchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -36,6 +38,8 @@ interface SurveyCreatorProps {
 
 export function SurveyCreator({ onCreateSurvey }: SurveyCreatorProps) {
   const [isCreating, setIsCreating] = useState(false);
+  const { connection } = useConnection();
+  const wallet = useAnchorWallet();
   
   const {
     register,
@@ -65,13 +69,27 @@ export function SurveyCreator({ onCreateSurvey }: SurveyCreatorProps) {
 
   const onSubmit = async (data: SurveyFormData) => {
     try {
+      // STRICT WALLET ENFORCEMENT - No wallet = No survey creation
+      if (!wallet) {
+        alert('❌ WALLET REQUIRED\n\nYou must connect your Solana wallet to create surveys.\n\nThis ensures your survey is properly encrypted and stored on-chain via Arcium Network.');
+        return;
+      }
+
+      if (!wallet.publicKey) {
+        alert('❌ WALLET NOT READY\n\nYour wallet is connected but not ready.\n\nPlease ensure your wallet is fully loaded and try again.');
+        return;
+      }
+
+      setIsCreating(true);
+
       const now = new Date();
       const startDate = data.startDate ? new Date(data.startDate) : now;
       const endDate = data.endDate ? new Date(data.endDate) : null;
       
       // Validate dates
       if (endDate && startDate >= endDate) {
-        alert('End date must be after start date');
+        alert('❌ End date must be after start date');
+        setIsCreating(false);
         return;
       }
       
@@ -90,13 +108,32 @@ export function SurveyCreator({ onCreateSurvey }: SurveyCreatorProps) {
         })),
       };
       
-      onCreateSurvey(surveyData);
-      alert('Survey created successfully!');
+      // MANDATORY ARCIUM TRANSACTION - This MUST succeed or survey creation fails
+      console.log('🔐 Initiating Arcium encrypted survey creation...');
+      const arciumResult = await createSurveyEncrypted(surveyData, connection, wallet);
+      
+      if (!arciumResult) {
+        throw new Error('Arcium transaction failed - no result returned');
+      }
+
+      console.log('✅ Arcium transaction successful:', arciumResult);
+      alert('🔐 Survey encrypted and committed on-chain successfully!\n\nNow saving to database...');
+
+      // Only save to database after successful blockchain transaction
+      await onCreateSurvey(surveyData);
+      
+      alert('🎉 SURVEY CREATED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Ready for responses');
       setIsCreating(false);
       reset();
     } catch (error) {
-      alert('Failed to create survey');
-      console.error('Error creating survey:', error);
+      console.error('❌ Survey creation failed:', error);
+      setIsCreating(false);
+      
+      if (error instanceof Error && error.message.includes('Arcium')) {
+        alert(`❌ BLOCKCHAIN TRANSACTION FAILED\n\nYour survey could not be created because the Arcium Network transaction failed.\n\nError: ${error.message}\n\nPlease:\n• Check your wallet has enough SOL for gas\n• Ensure you're on Solana Devnet\n• Try again`);
+      } else {
+        alert(`❌ SURVEY CREATION FAILED\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease check your wallet connection and try again.`);
+      }
     }
   };
 

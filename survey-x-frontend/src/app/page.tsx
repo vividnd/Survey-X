@@ -11,6 +11,7 @@ import { SurveyCreator } from '@/components/SurveyCreator';
 import { SurveyList } from '@/components/SurveyList';
 import { SurveyResponse } from '@/components/SurveyResponse';
 import { SurveyStats } from '@/components/SurveyStats';
+import { SurveyResponsesViewer } from '@/components/SurveyResponsesViewer';
 
 // Real survey data structure with timing features
 interface Survey {
@@ -39,6 +40,7 @@ export default function Home() {
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [statsSurvey, setStatsSurvey] = useState<Survey | null>(null);
+  const [responsesSurvey, setResponsesSurvey] = useState<Survey | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'create' | 'browse'>('create');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -86,38 +88,34 @@ export default function Home() {
   const completionRateValue = surveys.length > 0 ? Math.round((totalResponses / (surveys.length * 10)) * 100) : 0; // Assuming 10 is target per survey
   void completionRateValue;
 
-  // Load surveys from localStorage on component mount
+  // Load surveys from API (Supabase is now mandatory)
   useEffect(() => {
-    try {
-      const savedSurveys = localStorage.getItem('surveys');
-      if (savedSurveys) {
-        const parsedSurveys = JSON.parse(savedSurveys);
-        if (Array.isArray(parsedSurveys)) {
-          setSurveys(parsedSurveys);
+    (async () => {
+      try {
+        const res = await fetch('/api/surveys', { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json?.data)) {
+            setSurveys(json.data);
+          }
+        } else {
+          console.error('Failed to load surveys:', await res.text());
         }
+      } catch (error) {
+        console.error('Error loading surveys:', error);
+      } finally {
+        setIsLoaded(true);
       }
-    } catch (error) {
-      console.error('Error loading surveys from localStorage:', error);
-    } finally {
-      setIsLoaded(true);
-    }
+    })();
   }, []);
 
-  // Save surveys to localStorage whenever they change (but only after initial load)
-  useEffect(() => {
-    if (isLoaded) {
-      try {
-        localStorage.setItem('surveys', JSON.stringify(surveys));
-      } catch (error) {
-        console.error('Error saving surveys to localStorage:', error);
-      }
-    }
-  }, [surveys, isLoaded]);
 
-  const handleCreateSurvey = (newSurvey: Omit<Survey, 'id' | 'publicId' | 'createdAt' | 'responseCount' | 'keywords'>) => {
+
+  const handleCreateSurvey = async (
+    newSurvey: Omit<Survey, 'id' | 'publicId' | 'createdAt' | 'responseCount' | 'keywords'>
+  ) => {
     const publicId = generatePublicId();
     const keywords = extractKeywords(newSurvey.title, newSurvey.description);
-    
     const survey: Survey = {
       ...newSurvey,
       id: Date.now().toString(),
@@ -126,8 +124,19 @@ export default function Home() {
       createdAt: new Date().toISOString(),
       responseCount: 0,
     };
-    
-    setSurveys(prev => [...prev, survey]);
+
+    const res = await fetch('/api/surveys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(survey),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const saved = (json?.data ?? survey) as Survey;
+      setSurveys(prev => [...prev, saved]);
+    } else {
+      throw new Error(`Failed to create survey: ${await res.text()}`);
+    }
   };
 
   const handleViewSurvey = (surveyId: string) => {
@@ -145,32 +154,42 @@ export default function Home() {
     }
   };
 
-  const handleSurveySubmit = async (responses: Record<string, unknown>) => {
-    if (selectedSurvey) {
-      try {
-        // Update response count for the survey
-        setSurveys(prev => prev.map(survey => 
-          survey.id === selectedSurvey.id 
-            ? { ...survey, responseCount: survey.responseCount + 1 }
-            : survey
-        ));
-        
-        // Save responses to localStorage
-        const allResponses = JSON.parse(localStorage.getItem('surveyResponses') || '{}');
-        allResponses[selectedSurvey.id] = allResponses[selectedSurvey.id] || [];
-        allResponses[selectedSurvey.id].push({
-          timestamp: new Date().toISOString(),
-          responses
-        });
-        localStorage.setItem('surveyResponses', JSON.stringify(allResponses));
-        setSelectedSurvey(null);
-      } catch (error) {
-        console.error('Error saving survey response:', error);
-      }
+  const handleViewResponses = (surveyId: string) => {
+    const survey = surveys.find(s => s.id === surveyId);
+    if (survey) {
+      setResponsesSurvey(survey);
     }
   };
 
-  const handleDeleteSurvey = (surveyId: string) => {
+  const handleSurveySubmit = async (
+    responses: Record<string, unknown>,
+    arcium?: { queueSig: string; finalizeSig: string; decryptedResponse?: string }
+  ) => {
+    if (!selectedSurvey) return;
+    const payload = {
+      timestamp: new Date().toISOString(),
+      responses,
+      arcium,
+    };
+    const res = await fetch(`/api/surveys/${selectedSurvey.id}/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`Failed to submit response: ${await res.text()}`);
+    setSurveys(prev =>
+      prev.map(survey =>
+        survey.id === selectedSurvey.id
+          ? { ...survey, responseCount: survey.responseCount + 1 }
+          : survey
+      )
+    );
+    setSelectedSurvey(null);
+  };
+
+  const handleDeleteSurvey = async (surveyId: string) => {
+    const res = await fetch(`/api/surveys/${surveyId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Failed to delete survey: ${await res.text()}`);
     setSurveys(prev => prev.filter(s => s.id !== surveyId));
   };
 
@@ -321,6 +340,7 @@ export default function Home() {
             surveys={activeTab === 'create' ? surveys : filteredSurveys}
             onViewSurvey={handleViewSurvey}
             onViewStats={handleViewStats}
+            onViewResponses={handleViewResponses}
             onDeleteSurvey={activeTab === 'create' ? handleDeleteSurvey : undefined}
             onCopyId={copyToClipboard}
             showPublicId={true}
@@ -355,6 +375,14 @@ export default function Home() {
             setShowStats(false);
             setStatsSurvey(null);
           }}
+        />
+      )}
+
+      {responsesSurvey && (
+        <SurveyResponsesViewer
+          surveyId={responsesSurvey.id}
+          surveyTitle={responsesSurvey.title}
+          onClose={() => setResponsesSurvey(null)}
         />
       )}
 

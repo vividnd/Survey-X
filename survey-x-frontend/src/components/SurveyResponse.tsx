@@ -23,7 +23,10 @@ interface Survey {
 
 interface SurveyResponseProps {
   survey: Survey;
-  onSubmit: (responses: Record<string, unknown>) => void;
+  onSubmit: (
+    responses: Record<string, unknown>,
+    arcium?: { queueSig: string; finalizeSig: string; decryptedResponse?: string }
+  ) => void;
   onClose: () => void;
 }
 
@@ -84,22 +87,62 @@ export function SurveyResponse({ survey, onSubmit, onClose }: SurveyResponseProp
   };
 
   const handleQuestionSubmit = async (data: ResponseData) => {
+    setIsSubmitting(true);
+    const allResponses = { ...responses, ...data };
+    console.log('Submitting responses:', allResponses);
+
+    // STRICT WALLET ENFORCEMENT - No wallet = No survey response
+    if (!wallet) {
+      alert('❌ WALLET REQUIRED\n\nYou must connect your Solana wallet to submit survey responses.\n\nThis ensures your response is properly encrypted and stored on-chain via Arcium Network.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!wallet.publicKey) {
+      alert('❌ WALLET NOT READY\n\nYour wallet is connected but not ready.\n\nPlease ensure your wallet is fully loaded and try again.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    let arciumMeta: { queueSig: string; finalizeSig: string; decryptedResponse?: string } | undefined;
+    
+    // MANDATORY ARCIUM TRANSACTION - This MUST succeed or response submission fails
     try {
-      setIsSubmitting(true);
-      const allResponses = { ...responses, ...data };
-      console.log('Submitting responses:', allResponses);
-      // Call Arcium encrypted submission (stubbed now)
-      if (wallet) {
-        const res = await submitSurveyEncrypted(allResponses, connection, wallet);
-        const msg = `Queued: ${res.queueSig}\nFinalized: ${res.finalizeSig}` + (res.decryptedResponse !== undefined ? `\nDecrypted result: ${res.decryptedResponse.toString()}` : '')
-        alert(msg);
+      console.log('🔐 Initiating Arcium encrypted response submission...');
+      const res = await submitSurveyEncrypted(allResponses, connection, wallet);
+      
+      if (!res || !res.queueSig || !res.finalizeSig) {
+        throw new Error('Arcium transaction failed - incomplete result returned');
       }
-      await onSubmit(allResponses);
-      alert('Survey submitted successfully!');
+      
+      arciumMeta = {
+        queueSig: res.queueSig,
+        finalizeSig: res.finalizeSig,
+        decryptedResponse: res.decryptedResponse !== undefined ? res.decryptedResponse.toString() : undefined,
+      };
+      
+      console.log('✅ Arcium transaction successful:', arciumMeta);
+      alert('🔐 Response encrypted and committed on-chain successfully!\n\nNow saving to database...');
+    } catch (e) {
+      console.error('❌ Arcium submission failed:', e);
+      setIsSubmitting(false);
+      
+      if (e instanceof Error && e.message.includes('Arcium')) {
+        alert(`❌ BLOCKCHAIN TRANSACTION FAILED\n\nYour response could not be submitted because the Arcium Network transaction failed.\n\nError: ${e.message}\n\nPlease:\n• Check your wallet has enough SOL for gas\n• Ensure you're on Solana Devnet\n• Try again`);
+      } else {
+        alert(`❌ ENCRYPTION FAILED\n\nFailed to submit encrypted response on-chain.\n\nError: ${e instanceof Error ? e.message : 'Unknown error'}\n\nPlease check your wallet connection and try again.`);
+      }
+      return;
+    }
+
+    // Only save to database after successful blockchain transaction
+    try {
+      await onSubmit(allResponses, arciumMeta);
+      alert('🎉 RESPONSE SUBMITTED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Your privacy is protected');
       onClose();
     } catch (error) {
-      alert('Failed to submit survey');
-      console.error('Error submitting survey:', error);
+      console.error('❌ Database submission failed:', error);
+      alert(`❌ DATABASE SAVE FAILED\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nYour on-chain transaction was successful, but the response couldn't be saved.\n\nPlease contact support with your transaction signatures:\n• Queue: ${arciumMeta?.queueSig}\n• Finalize: ${arciumMeta?.finalizeSig}`);
     } finally {
       setIsSubmitting(false);
     }

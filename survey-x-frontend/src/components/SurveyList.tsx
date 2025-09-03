@@ -22,9 +22,10 @@ interface SurveyListProps {
   onDeleteSurvey?: (surveyId: string) => void;
   onCopyId?: (id: string) => void;
   showPublicId?: boolean;
+  onViewResponses?: (surveyId: string) => void;
 }
 
-export function SurveyList({ surveys, onViewSurvey, onViewStats, onDeleteSurvey, onCopyId, showPublicId }: SurveyListProps) {
+export function SurveyList({ surveys, onViewSurvey, onViewStats, onDeleteSurvey, onCopyId, showPublicId, onViewResponses }: SurveyListProps) {
   const isSurveyAvailable = (survey: Survey) => {
     const now = new Date();
     const startDate = survey.startDate ? new Date(survey.startDate) : null;
@@ -160,6 +161,14 @@ export function SurveyList({ surveys, onViewSurvey, onViewStats, onDeleteSurvey,
               >
                 Stats
               </button>
+              {onViewResponses && (
+                <button
+                  onClick={() => onViewResponses(survey.id)}
+                  className="px-4 py-2 border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-white rounded-md text-sm font-medium transition-colors"
+                >
+                  Responses
+                </button>
+              )}
               {onDeleteSurvey && (
                 <button
                   onClick={() => onDeleteSurvey(survey.id)}
