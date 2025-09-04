@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-survey_x = "FoZGZMWrz5ATiCDJsyakp8bzF9gZjGBWZFGpJQrLEgtY"
+survey_x = "FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY"
 
 [programs.localnet]
-survey_x = "FoZGZMWrz5ATiCDJsyakp8bzF9gZjGBWZFGpJQrLEgtY"
+survey_x = "FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY"
 
 [registry]
 url = "https://api.apr.dev"

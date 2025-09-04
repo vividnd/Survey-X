@@ -4,7 +4,7 @@ use arcium_anchor::prelude::*;
 const COMP_DEF_OFFSET_ADD_TOGETHER: u32 = comp_def_offset("add_together");
 const COMP_DEF_OFFSET_SUBMIT_RESPONSE: u32 = comp_def_offset("submit_response");
 
-declare_id!("FoZGZMWrz5ATiCDJsyakp8bzF9gZjGBWZFGpJQrLEgtY");
+declare_id!("FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY");
 
 #[arcium_program]
 pub mod survey_x {
