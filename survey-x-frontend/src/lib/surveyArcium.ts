@@ -78,7 +78,7 @@ export async function submitSurveyEncrypted(
   connection: Connection,
   wallet: AnchorWallet
 ): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint; baseNonce: number[] }> {
-  console.log('🔐 Following OFFICIAL Arcium documentation pattern...');
+  console.log('🔐 Following OFFICIAL Arcium Hello World documentation pattern...');
   
   // Create provider for Arcium operations
   const provider = new anchor.AnchorProvider(connection, wallet as unknown as anchor.Wallet, { commitment: 'confirmed' });
@@ -142,7 +142,7 @@ export async function submitSurveyEncrypted(
       }, 2000); // Simulate 2-second computation time
     });
 
-        // Following Arcium Hello World guide: Use proper program integration
+    // Following Arcium Hello World guide: Use proper program integration
     console.log('🔐 Following Arcium Hello World pattern for program integration...');
     
     // Create program instance following Arcium docs pattern
@@ -168,6 +168,7 @@ export async function submitSurveyEncrypted(
           const transaction = new anchor.web3.Transaction();
           
           // Add instruction to call the submit_response function
+          // Following Arcium Hello World pattern exactly
           const instruction = new anchor.web3.TransactionInstruction({
             keys: [
               { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // payer
@@ -176,16 +177,18 @@ export async function submitSurveyEncrypted(
               { pubkey: getMempoolAccAddress(programId), isSigner: false, isWritable: true }, // mempool account
               { pubkey: getExecutingPoolAccAddress(programId), isSigner: false, isWritable: true }, // executing pool
               { pubkey: getCompDefAccAddress(programId, Buffer.from(getCompDefAccOffset('submit_response')).readUInt32LE()), isSigner: false, isWritable: false }, // comp def
-              { pubkey: getArciumEnv().arciumClusterPubkey, isSigner: false, isWritable: true }, // cluster
+              { pubkey: arciumEnv.arciumClusterPubkey, isSigner: false, isWritable: true }, // cluster
               { pubkey: anchor.web3.SystemProgram.programId, isSigner: false, isWritable: false }, // system program
             ],
             programId: programId,
+            // Following Arcium Hello World pattern: instruction discriminator + args
             data: Buffer.concat([
               Buffer.from([0x1]), // instruction discriminator for submit_response
               computationOffset.toArrayLike(Buffer, 'le', 8), // computation offset
-              Array.from(ciphertext[0]), // ciphertext
-              Array.from(publicKey), // public key
-              new anchor.BN(deserializeLE(baseNonce).toString()).toArrayLike(Buffer, 'le', 16), // nonce
+              // Following Arcium docs: ArcisPubkey, PlaintextU128, EncryptedU64
+              Buffer.from(publicKey), // ArcisPubkey (32 bytes)
+              new anchor.BN(deserializeLE(baseNonce).toString()).toArrayLike(Buffer, 'le', 16), // PlaintextU128 (16 bytes)
+              Buffer.from(ciphertext[0]), // EncryptedU64 (32 bytes)
             ])
           });
 
@@ -255,13 +258,13 @@ export async function submitSurveyEncrypted(
       };
     }
 
-      } catch (error) {
-      console.error('❌ Arcium integration failed:', error);
-      throw new Error(`Arcium blockchain transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-    
-    // Fallback return statement to satisfy TypeScript
-    throw new Error('Unexpected end of function - this should not be reached');
+  } catch (error) {
+    console.error('❌ Arcium integration failed:', error);
+    throw new Error(`Arcium blockchain transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+  
+  // Fallback return statement to satisfy TypeScript
+  throw new Error('Unexpected end of function - this should not be reached');
 }
 
 export async function createSurveyEncrypted(
