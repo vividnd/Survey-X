@@ -39,36 +39,18 @@ export async function submitSurveyEncrypted(
   connection: Connection,
   wallet: AnchorWallet
 ): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint }> {
-  const provider = new anchor.AnchorProvider(connection, wallet as unknown as anchor.Wallet, { commitment: 'confirmed' });
-  anchor.setProvider(provider);
+  // TEMPORARY WORKAROUND: Skip all Arcium client calls for now
+  // This prevents the "Account does not exist" errors while we implement proper integration
+  console.log('🔐 Using temporary mock implementation to avoid Arcium client errors...');
 
-  const programId = new PublicKey(PROGRAM_ID);
-  
-  // For Arcium programs, we need to use the Arcium client directly
-  // instead of trying to fetch an IDL that doesn't exist
-  console.log('🔐 Using Arcium client for program interaction...');
-
-  // Keys and cipher
-  const mxePublicKey = await getMXEPublicKey(provider as anchor.AnchorProvider, programId);
-  if (!mxePublicKey) throw new Error('MXE x25519 public key not found');
-  const privateKey = x25519.utils.randomSecretKey();
-  const publicKey = x25519.getPublicKey(privateKey);
-  const sharedSecret = x25519.getSharedSecret(privateKey, mxePublicKey as Uint8Array);
-  const cipher = new RescueCipher(sharedSecret);
-  
-  // Encode survey payload to u64
+  // Encode survey payload to u64 for consistency
   const encoded = await hashToU64(input);
-  const nonce = crypto.getRandomValues(new Uint8Array(16));
-  const ciphertext = cipher.encrypt([encoded], nonce); // single field
-
-  const computationOffset = randomU64BN();
-
-  // For now, return a mock result since we can't use the program directly
-  // This is a temporary workaround until we implement proper Arcium integration
-  console.log('🔐 Mock Arcium transaction for now...');
   
+  // Generate mock transaction signatures
   const mockQueueSig = 'mock_queue_signature_' + Date.now();
   const mockFinalizeSig = 'mock_finalize_signature_' + Date.now();
+  
+  console.log('🔐 Mock Arcium transaction completed successfully');
   
   return { 
     queueSig: mockQueueSig, 
