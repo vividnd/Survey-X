@@ -25,6 +25,22 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Ensure all input elements have proper contrast */
+input, textarea, select {
+  color: #374151 !important; /* gray-700 */
+  background-color: #ffffff !important; /* white */
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af !important; /* gray-400 */
+}
+
+/* Focus states for better UX */
+input:focus, textarea:focus, select:focus {
+  border-color: #a855f7 !important; /* purple-500 */
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1) !important;
+}
+
 /* Sliding footer animation */
 @keyframes slideLeftToRight {
   0% {

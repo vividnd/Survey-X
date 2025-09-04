@@ -1,42 +1,22 @@
-'use client';
+'use client'
 
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
-import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from '@solana/wallet-adapter-react';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
-import { useMemo } from 'react';
+import React from 'react'
+import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from '@solana/wallet-adapter-react'
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom'
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 
-// Import wallet styles
-import '@solana/wallet-adapter-react-ui/styles.css';
+// Import wallet adapter CSS
+import '@solana/wallet-adapter-react-ui/styles.css'
 
-interface WalletProviderProps {
-  children: React.ReactNode;
-}
-
-export function WalletProvider({ children }: WalletProviderProps) {
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => {
-    // Prefer explicit RPC URL if provided
-    const envUrl = process.env.NEXT_PUBLIC_RPC_URL;
-    if (envUrl && envUrl.length > 0) return envUrl;
-
-    // Default to Solana devnet
-    return 'https://api.devnet.solana.com';
-  }, []);
-
-  const wallets = useMemo(
-    () => [new PhantomWalletAdapter()],
-    []
-  );
+export default function WalletProvider({ children }: { children: React.ReactNode }) {
+  const endpoint = 'https://api.devnet.solana.com'
+  const wallets = [new PhantomWalletAdapter()]
 
   return (
     <ConnectionProvider endpoint={endpoint}>
       <SolanaWalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
+        <WalletModalProvider>{children}</WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>
-  );
+  )
 }

@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-survey_x = "FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY"
+survey_x = "HhfT3ytQx3CsvR354wcPRGB4m7sKQ7Xhpcx4VZ1QiGaR"
 
 [programs.localnet]
-survey_x = "FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY"
+survey_x = "HhfT3ytQx3CsvR354wcPRGB4m7sKQ7Xhpcx4VZ1QiGaR"
 
 [registry]
 url = "https://api.apr.dev"
@@ -18,7 +18,7 @@ url = "https://api.apr.dev"
 [provider]
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
-rpc_url = "https://api.devnet.solana.com"
+rpc_url = "https://devnet.helius-rpc.com/?api-key=9ad422af-4f8a-4886-b124-77ad76ad683d"
 
 [scripts]
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

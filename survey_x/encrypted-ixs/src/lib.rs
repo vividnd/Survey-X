@@ -16,18 +16,55 @@ mod circuits {
         input_ctxt.owner.from_arcis(sum)
     }
 
-    // New confidential instruction for submitting a single numeric response (e.g., rating or compact hash)
+    // Updated confidential instruction for submitting survey responses with sealing
     #[instruction]
-    pub fn submit_response(response_ctxt: Enc<Shared, u64>) -> Enc<Shared, u64> {
+    pub fn submit_response(
+        response_ctxt: Enc<Shared, u64>,
+        loan_officer: Shared
+    ) -> (Enc<Shared, u64>, Enc<Shared, u8>) {
         let v = response_ctxt.to_arcis();
-        response_ctxt.owner.from_arcis(v)
+        
+        // Process the response and create eligibility assessment
+        let eligibility_score = if v > 1000u64 {
+            8u8 // High eligibility
+        } else if v > 500u64 {
+            6u8 // Medium eligibility
+        } else if v > 100u64 {
+            4u8 // Low eligibility
+        } else {
+            2u8 // Very low eligibility
+        };
+        
+        // Return results for different recipients (sealing pattern)
+        let owner_result = response_ctxt.owner.from_arcis(v);
+        let loan_officer_result = loan_officer.from_arcis(eligibility_score);
+        
+        (owner_result, loan_officer_result)
     }
 
-    // New confidential instruction for creating surveys
+    // Updated confidential instruction for creating surveys with sealing
     #[instruction]
-    pub fn create_survey(survey_metadata_ctxt: Enc<Shared, u64>) -> Enc<Shared, u64> {
+    pub fn create_survey(
+        survey_metadata_ctxt: Enc<Shared, u64>,
+        survey_analyst: Shared
+    ) -> (Enc<Shared, u64>, Enc<Shared, u8>) {
         let metadata = survey_metadata_ctxt.to_arcis();
-        // Return the metadata as-is for now (could add validation/computation here)
-        survey_metadata_ctxt.owner.from_arcis(metadata)
+        
+        // Analyze survey metadata and create insights
+        let quality_score = if metadata > 1000u64 {
+            9u8 // High quality
+        } else if metadata > 500u64 {
+            7u8 // Good quality
+        } else if metadata > 100u64 {
+            5u8 // Medium quality
+        } else {
+            3u8 // Low quality
+        };
+        
+        // Return results for different recipients (sealing pattern)
+        let creator_result = survey_metadata_ctxt.owner.from_arcis(metadata);
+        let analyst_result = survey_analyst.from_arcis(quality_score);
+        
+        (creator_result, analyst_result)
     }
 }

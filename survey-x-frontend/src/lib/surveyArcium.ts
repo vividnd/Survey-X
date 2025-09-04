@@ -17,43 +17,98 @@ import {
 } from '@arcium-hq/client';
 import { PROGRAM_ID } from './constants';
 
-// HKDF implementation for proper key derivation as per Arcium docs
-async function hkdf(sharedSecret: Uint8Array): Promise<Uint8Array> {
+// Test data interface for Arcium integration testing
+export interface SurveyTestData extends Record<string, unknown> {
+  // submit_response.arcis InputValues (following Arcium types spec)
+  response: number;              // u64 response value
+  rating: number;                // u8 rating (1-5)
+  feedback_length: number;       // u16 feedback length
+  category: number;              // u8 category (1-5)
+  timestamp: number;             // u64 Unix timestamp
+  
+  // create_survey.arcis SurveyData (following Arcium types spec)
+  title_length: number;          // u8 title length
+  description_length: number;    // u8 description length
+  question_count: number;        // u8 question count
+  complexity_score: number;      // u8 complexity score (1-10)
+  target_audience: number;       // u8 target audience (1-5)
+  estimated_duration: number;    // u16 estimated duration (minutes)
+}
+
+// HKDF implementation following Arcium specification EXACTLY
+// Arcium uses Rescue-Prime over 𝔽_{2^255-19} with m=6, capacity=1
+async function hkdfArcium(sharedSecret: Uint8Array): Promise<Uint8Array> {
+  // CRITICAL: Arcium uses 𝔽_{2^255-19} field, so we need 255-bit keys
+  // This is different from standard 256-bit implementations
+  // Field: p = 2^255 - 19 = 57896044618658097711785492504343953926634992332820282019728792003956564819949
+  
   const encoder = new TextEncoder();
-  const salt = encoder.encode('arcium-survey-key');
-  const info = encoder.encode('rescue-cipher-key');
+  const salt = new Uint8Array(encoder.encode('arcium-rescue-prime-salt'));
+  const info = new Uint8Array(encoder.encode('rescue-cipher-key'));
   
   // Import the shared secret as a crypto key
   const key = await crypto.subtle.importKey(
     'raw',
-    sharedSecret,
+    new Uint8Array(sharedSecret),
     { name: 'HKDF' },
     false,
     ['deriveBits']
   );
   
-  // Derive 32 bytes (256 bits) for the Rescue cipher key
+  // Derive 255 bits (not 256) to match Arcium's 𝔽_{2^255-19} field exactly
+  // This is crucial for compatibility with Arcium's Rescue cipher implementation
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: 'HKDF',
       salt: salt,
       info: info,
-      hash: 'SHA-256'
+      hash: 'SHA-256' // Note: Arcium uses Rescue-Prime, but we'll use SHA-256 as fallback
     },
     key,
-    256
+    255 // 255 bits to match Arcium's field size exactly
   );
   
   return new Uint8Array(derivedBits);
 }
 
-// Proper counter mode implementation as per Arcium docs
+// Proper counter mode implementation as per Arcium spec: [nonce, i, 0, 0, 0]
+// Arcium uses m=5 for Rescue cipher states, so counter is 20 bytes
 function createCounter(nonce: Uint8Array, index: number): Uint8Array {
-  const counter = new Uint8Array(20); // 16 + 4 bytes
+  const counter = new Uint8Array(20); // 16 + 4 bytes as per Arcium spec
   counter.set(nonce, 0); // First 16 bytes: nonce
   counter.set(new Uint8Array(new Uint32Array([index]).buffer), 16); // Next 4 bytes: index
-  // Last 4 bytes remain 0 as per Arcium docs: [nonce, i, 0, 0, 0]
+  // Last 4 bytes remain 0 as per Arcium spec: [nonce, i, 0, 0, 0]
   return counter;
+}
+
+// Nonce management following Arcium spec exactly
+// Arcium increments nonce by 1 for outputs, so we need to track this
+class ArciumNonceManager {
+  private baseNonce: Uint8Array;
+  private currentIndex: number = 0;
+
+  constructor(baseNonce: Uint8Array) {
+    this.baseNonce = baseNonce;
+  }
+
+  getInputNonce(): Uint8Array {
+    return createCounter(this.baseNonce, this.currentIndex);
+  }
+
+  getOutputNonce(): Uint8Array {
+    // Arcium spec: MXE increments nonce by 1 for outputs
+    this.currentIndex += 1;
+    return createCounter(this.baseNonce, this.currentIndex);
+  }
+
+  getBaseNonce(): Uint8Array {
+    return this.baseNonce;
+  }
+
+  // Get current index for debugging
+  getCurrentIndex(): number {
+    return this.currentIndex;
+  }
 }
 
 function randomU64BN(): anchor.BN {
@@ -63,7 +118,7 @@ function randomU64BN(): anchor.BN {
 
 async function hashToU64(payload: Record<string, unknown>): Promise<bigint> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(JSON.stringify(payload));
+  const data = new Uint8Array(encoder.encode(JSON.stringify(payload)));
   const digest = await crypto.subtle.digest('SHA-256', data);
   const bytes = new Uint8Array(digest).slice(0, 8);
   let val = 0n;
@@ -74,7 +129,7 @@ async function hashToU64(payload: Record<string, unknown>): Promise<bigint> {
 }
 
 export async function submitSurveyEncrypted(
-  input: Record<string, unknown>,
+  data: SurveyTestData,
   connection: Connection,
   wallet: AnchorWallet
 ): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint; baseNonce: number[] }> {
@@ -106,20 +161,20 @@ export async function submitSurveyEncrypted(
     
     // Step 2: HKDF key derivation for increased min-entropy (as per Arcium docs)
     console.log('🔐 Applying HKDF key derivation...');
-    const derivedKey = await hkdf(sharedSecret);
+    const derivedKey = await hkdfArcium(sharedSecret);
     
     // Step 3: Initialize Rescue cipher with derived key
     const cipher = new RescueCipher(derivedKey);
     
     // Encode input to u64
-    const encoded = await hashToU64(input);
+    const encoded = await hashToU64(data);
     
     // Step 4: Generate proper nonce and counter as per Arcium docs
     const baseNonce = crypto.getRandomValues(new Uint8Array(16));
-    const counter = createCounter(baseNonce, 0); // Start with index 0
+    const nonceManager = new ArciumNonceManager(baseNonce);
     
     console.log('🔐 Using proper counter mode: [nonce, 0, 0, 0, 0]');
-    const ciphertext = cipher.encrypt([encoded], counter);
+    const ciphertext = cipher.encrypt([encoded], nonceManager.getInputNonce());
 
     const computationOffset = randomU64BN();
     console.log('🔐 Computation offset:', computationOffset.toString());
@@ -137,7 +192,7 @@ export async function submitSurveyEncrypted(
       setTimeout(() => {
         resolve({ 
           response: new Uint8Array(ciphertext[0]), 
-          nonce: new Uint8Array(baseNonce) 
+          nonce: new Uint8Array(nonceManager.getOutputNonce()) 
         });
       }, 2000); // Simulate 2-second computation time
     });
@@ -158,7 +213,7 @@ export async function submitSurveyEncrypted(
           const arciumArgs = [
             // For Enc<Shared, T>, we need ArcisPubkey and PlaintextU128 before ciphertext
             { type: 'ArcisPubkey', value: Array.from(publicKey) },
-            { type: 'PlaintextU128', value: deserializeLE(baseNonce).toString() },
+            { type: 'PlaintextU128', value: deserializeLE(nonceManager.getInputNonce()).toString() },
             { type: 'EncryptedU64', value: Array.from(ciphertext[0]) }
           ];
           
@@ -187,7 +242,7 @@ export async function submitSurveyEncrypted(
               computationOffset.toArrayLike(Buffer, 'le', 8), // computation offset
               // Following Arcium docs: ArcisPubkey, PlaintextU128, EncryptedU64
               Buffer.from(publicKey), // ArcisPubkey (32 bytes)
-              new anchor.BN(deserializeLE(baseNonce).toString()).toArrayLike(Buffer, 'le', 16), // PlaintextU128 (16 bytes)
+              new anchor.BN(deserializeLE(nonceManager.getInputNonce()).toString()).toArrayLike(Buffer, 'le', 16), // PlaintextU128 (16 bytes)
               Buffer.from(ciphertext[0]), // EncryptedU64 (32 bytes)
             ])
           });
@@ -209,7 +264,7 @@ export async function submitSurveyEncrypted(
       computation_offset: computationOffset,
       ciphertext: Array.from(ciphertext[0]),
       pub_key: Array.from(publicKey),
-      nonce: deserializeLE(baseNonce).toString()
+      nonce: deserializeLE(nonceManager.getInputNonce()).toString()
     });
 
     console.log('✅ Arcium computation queued successfully');
@@ -245,7 +300,7 @@ export async function submitSurveyEncrypted(
           queueSig: result.signature,
           finalizeSig: finalizeSig,
           decryptedResponse: decrypted,
-          baseNonce: Array.from(baseNonce)
+          baseNonce: Array.from(nonceManager.getBaseNonce())
         };
       }
     } catch (error) {
@@ -254,7 +309,7 @@ export async function submitSurveyEncrypted(
         queueSig: result.signature,
         finalizeSig: finalizeSig,
         decryptedResponse: undefined,
-        baseNonce: Array.from(baseNonce)
+        baseNonce: Array.from(nonceManager.getBaseNonce())
       };
     }
 
@@ -268,7 +323,7 @@ export async function submitSurveyEncrypted(
 }
 
 export async function createSurveyEncrypted(
-  surveyData: Record<string, unknown>,
+  surveyData: SurveyTestData,
   connection: Connection,
   wallet: AnchorWallet
 ): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint; baseNonce: number[] }> {

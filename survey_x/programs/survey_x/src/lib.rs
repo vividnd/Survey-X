@@ -1,10 +1,43 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use std::mem::size_of;
 
 const COMP_DEF_OFFSET_ADD_TOGETHER: u32 = comp_def_offset("add_together");
 const COMP_DEF_OFFSET_SUBMIT_RESPONSE: u32 = comp_def_offset("submit_response");
+const COMP_DEF_OFFSET_CREATE_SURVEY: u32 = comp_def_offset("create_survey");
 
-declare_id!("FoZGZMWrz5ATiCDJsyakp8bxF9gZjGBWZFGpJQrLEgtY");
+// Computation result storage data structures
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub enum ComputationType {
+    AddTogether,
+    SubmitResponse,
+    CreateSurvey,
+    ProcessSurveyData,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub enum ComputationStatus {
+    Pending,
+    Processing,
+    Completed,
+    Failed,
+}
+
+#[account]
+pub struct ComputationResult {
+    pub computation_id: [u8; 32],      // Unique computation identifier
+    pub computation_type: ComputationType,
+    pub status: ComputationStatus,
+    pub result_data: [u8; 32],         // Encrypted result data
+    pub nonce: [u8; 16],               // Encryption nonce
+    pub created_at: i64,               // Creation timestamp
+    pub completed_at: i64,             // Completion timestamp
+    pub creator: Pubkey,               // Who initiated the computation
+    pub survey_id: Option<[u8; 32]>,   // Associated survey (if applicable)
+    pub response_id: Option<[u8; 32]>, // Associated response (if applicable)
+}
+
+declare_id!("HhfT3ytQx3CsvR354wcPRGB4m7sKQ7Xhpcx4VZ1QiGaR");
 
 #[arcium_program]
 pub mod survey_x {
@@ -43,6 +76,21 @@ pub mod survey_x {
             _ => return Err(ErrorCode::AbortedComputation.into()),
         };
 
+        // Store computation result persistently
+        let computation_result = &mut ctx.accounts.computation_result;
+        let clock = Clock::get()?;
+
+        computation_result.computation_id = [0u8; 32]; // Generate unique ID based on context
+        computation_result.computation_type = ComputationType::AddTogether;
+        computation_result.status = ComputationStatus::Completed;
+        computation_result.result_data = o.ciphertexts[0];
+        computation_result.nonce = o.nonce.to_le_bytes();
+        computation_result.created_at = clock.unix_timestamp;
+        computation_result.completed_at = clock.unix_timestamp;
+        computation_result.creator = *ctx.accounts.payer.key;
+        computation_result.survey_id = None;
+        computation_result.response_id = None;
+
         emit!(SumEvent {
             sum: o.ciphertexts[0],
             nonce: o.nonce.to_le_bytes(),
@@ -54,6 +102,12 @@ pub mod survey_x {
         init_comp_def(ctx.accounts, true, 0, None, None)?;
         Ok(())
     }
+
+    pub fn init_create_survey_comp_def(ctx: Context<InitCreateSurveyCompDef>) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
 
     pub fn submit_response(
         ctx: Context<SubmitResponse>,
@@ -80,9 +134,77 @@ pub mod survey_x {
             ComputationOutputs::Success(SubmitResponseOutput { field_0: o }) => o,
             _ => return Err(ErrorCode::AbortedComputation.into()),
         };
+
+        // Store computation result persistently
+        let computation_result = &mut ctx.accounts.computation_result;
+        let clock = Clock::get()?;
+
+        computation_result.computation_id = [0u8; 32]; // Generate unique ID based on context
+        computation_result.computation_type = ComputationType::SubmitResponse;
+        computation_result.status = ComputationStatus::Completed;
+        computation_result.result_data = o.field_0.ciphertexts[0]; // ProcessedResponse
+        computation_result.nonce = o.field_0.nonce.to_le_bytes();
+        computation_result.created_at = clock.unix_timestamp;
+        computation_result.completed_at = clock.unix_timestamp;
+        computation_result.creator = *ctx.accounts.payer.key;
+        computation_result.survey_id = None; // TODO: Link to actual survey
+        computation_result.response_id = Some([0u8; 32]); // TODO: Generate proper response ID
+
+        // Handle tuple return: (Enc<Shared, ProcessedResponse>, Enc<Shared, LoanEligibility>)
+        // Access the first result (ProcessedResponse) from the tuple
         emit!(ResponseEvent {
-            response: o.ciphertexts[0],
-            nonce: o.nonce.to_le_bytes(),
+            response: o.field_0.ciphertexts[0],
+            nonce: o.field_0.nonce.to_le_bytes(),
+        });
+        Ok(())
+    }
+
+    pub fn create_survey(
+        ctx: Context<CreateSurvey>,
+        computation_offset: u64,
+        ciphertext: [u8; 32],
+        pub_key: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        let args = vec![
+            Argument::ArcisPubkey(pub_key),
+            Argument::PlaintextU128(nonce),
+            Argument::EncryptedU64(ciphertext),
+        ];
+        queue_computation(ctx.accounts, computation_offset, args, vec![], None)?;
+        Ok(())
+    }
+
+    #[arcium_callback(encrypted_ix = "create_survey")]
+    pub fn create_survey_callback(
+        ctx: Context<CreateSurveyCallback>,
+        output: ComputationOutputs<CreateSurveyOutput>,
+    ) -> Result<()> {
+        let o = match output {
+            ComputationOutputs::Success(CreateSurveyOutput { field_0: o }) => o,
+            _ => return Err(ErrorCode::AbortedComputation.into()),
+        };
+
+        // Store computation result persistently
+        let computation_result = &mut ctx.accounts.computation_result;
+        let clock = Clock::get()?;
+
+        computation_result.computation_id = [0u8; 32]; // Generate unique ID based on context
+        computation_result.computation_type = ComputationType::CreateSurvey;
+        computation_result.status = ComputationStatus::Completed;
+        computation_result.result_data = o.field_0.ciphertexts[0]; // SurveyMetrics
+        computation_result.nonce = o.field_0.nonce.to_le_bytes();
+        computation_result.created_at = clock.unix_timestamp;
+        computation_result.completed_at = clock.unix_timestamp;
+        computation_result.creator = *ctx.accounts.payer.key;
+        computation_result.survey_id = Some([0u8; 32]); // TODO: Generate proper survey ID
+        computation_result.response_id = None;
+
+        // Handle tuple return: (Enc<Shared, SurveyMetrics>, Enc<Shared, SurveyAnalysis>)
+        // Access the first result (SurveyMetrics) from the tuple
+        emit!(SurveyCreatedEvent {
+            survey_id: o.field_0.ciphertexts[0],
+            nonce: o.field_0.nonce.to_le_bytes(),
         });
         Ok(())
     }
@@ -148,6 +270,15 @@ pub struct AddTogetherCallback<'info> {
         address = derive_comp_def_pda!(COMP_DEF_OFFSET_ADD_TOGETHER)
     )]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + size_of::<ComputationResult>(),
+        seeds = [b"computation_result", payer.key().as_ref()],
+        bump
+    )]
+    pub computation_result: Account<'info, ComputationResult>,
+    pub system_program: Program<'info, System>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: Sysvar account provided by runtime; verified by address constraint above.
     pub instructions_sysvar: AccountInfo<'info>,
@@ -205,6 +336,15 @@ pub struct SubmitResponseCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_SUBMIT_RESPONSE))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + size_of::<ComputationResult>(),
+        seeds = [b"computation_result", payer.key().as_ref()],
+        bump
+    )]
+    pub computation_result: Account<'info, ComputationResult>,
+    pub system_program: Program<'info, System>,
     #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
     /// CHECK: Sysvar account provided by runtime; verified by address constraint above.
     pub instructions_sysvar: AccountInfo<'info>,
@@ -242,4 +382,77 @@ pub enum ErrorCode {
     AbortedComputation,
     #[msg("Cluster not set")]
     ClusterNotSet,
+}
+
+#[queue_computation_accounts("create_survey", payer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct CreateSurvey<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mempool_pda!())]
+    /// CHECK: This is a PDA managed by the Arcium program and validated there.
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!())]
+    /// CHECK: This is a PDA managed by the Arcium program and validated there.
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset))]
+    /// CHECK: This is a PDA managed by the Arcium program and validated there.
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CREATE_SURVEY))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Account<'info, FeePool>,
+    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Account<'info, ClockAccount>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("create_survey", payer)]
+#[derive(Accounts)]
+pub struct CreateSurveyCallback<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CREATE_SURVEY))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + size_of::<ComputationResult>(),
+        seeds = [b"computation_result", payer.key().as_ref()],
+        bump
+    )]
+    pub computation_result: Account<'info, ComputationResult>,
+    pub system_program: Program<'info, System>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions_sysvar, checked by the account constraint
+    pub instructions_sysvar: AccountInfo<'info>,
+}
+
+#[init_computation_definition_accounts("create_survey", payer)]
+#[derive(Accounts)]
+pub struct InitCreateSurveyCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    /// Can't check it here as it's not initialized yet.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+
+#[event]
+pub struct SurveyCreatedEvent {
+    pub survey_id: [u8; 32],
+    pub nonce: [u8; 16],
 }

@@ -1,29 +1,35 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { WalletProvider } from "@/components/WalletProvider";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import WalletProvider from '@/components/WalletProvider'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
 
-const inter = Inter({
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Survey X - Blockchain-Powered Surveys",
-  description: "Create, share, and analyze surveys with blockchain-powered privacy and real-time insights.",
-};
+  title: 'Survey-X | Private Surveys on Solana',
+  description: 'Create and respond to encrypted surveys with privacy-preserving MPC technology',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-gradient-to-br from-slate-50 to-purple-50 text-gray-900 min-h-screen`}>
         <WalletProvider>
-          {children}
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main className="flex-1">
+              {children}
+            </main>
+            <Footer />
+          </div>
         </WalletProvider>
       </body>
     </html>
-  );
+  )
 }

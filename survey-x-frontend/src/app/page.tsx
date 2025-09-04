@@ -1,401 +1,274 @@
-'use client';
+'use client'
 
-        // Survey X - Blockchain-Powered Surveys with Arcium Integration
-        // Trigger Vercel redeploy with latest fixes and improved popups
-        import { useState, useEffect } from 'react';
-        import dynamic from 'next/dynamic';
-const WalletMultiButton = dynamic(
-  () => import('@solana/wallet-adapter-react-ui').then((m) => m.WalletMultiButton),
-  { ssr: false }
-);
-import { SurveyCreator } from '@/components/SurveyCreator';
-// Devnet demo removed
-import { SurveyList } from '@/components/SurveyList';
-import { SurveyResponse } from '@/components/SurveyResponse';
-import { SurveyStats } from '@/components/SurveyStats';
-import { SurveyResponsesViewer } from '@/components/SurveyResponsesViewer';
+import { useState, useEffect } from 'react'
+import { useWallet } from '@solana/wallet-adapter-react'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { Search, Plus, TrendingUp, Users, Shield, Zap, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import type { Survey } from '@/lib/supabase'
 
-// Real survey data structure with timing features
-interface Survey {
-  id: string;
-  publicId: string; // User-friendly ID for sharing
-  title: string;
-  description: string;
-  questionCount: number;
-  responseCount: number;
-  createdAt: string;
-  isActive: boolean;
-  startDate?: string;
-  endDate?: string;
-  maxResponses?: number;
-  keywords: string[]; // For search functionality
-  questions: {
-    id: string;
-    text: string;
-    type: 'text' | 'multiple-choice' | 'rating';
-    options?: string[];
-  }[];
-}
+export default function HomePage() {
+  const { publicKey, connected } = useWallet()
+  const [surveys, setSurveys] = useState<Survey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
 
-export default function Home() {
-  const [surveys, setSurveys] = useState<Survey[]>([]);
-  const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
-  const [showStats, setShowStats] = useState(false);
-  const [statsSurvey, setStatsSurvey] = useState<Survey | null>(null);
-  const [responsesSurvey, setResponsesSurvey] = useState<Survey | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'create' | 'browse'>('create');
-  const [isLoaded, setIsLoaded] = useState(false);
+  const categories = [
+    'all', 'technology', 'health', 'education', 'entertainment',
+    'business', 'sports', 'politics', 'science', 'lifestyle'
+  ]
 
-  // Generate user-friendly survey ID
-  const generatePublicId = () => {
-    const adjectives = ['Quick', 'Smart', 'Fun', 'Cool', 'Easy', 'Fast', 'Good', 'Nice', 'Best', 'Top'];
-    const nouns = ['Survey', 'Poll', 'Quiz', 'Form', 'Study', 'Check', 'Ask', 'Test', 'Vote', 'Query'];
-    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const noun = nouns[Math.floor(Math.random() * nouns.length)];
-    const numbers = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
-    return `${adjective}${noun}${numbers}`;
-  };
-
-  // Extract keywords from survey title and description
-  const extractKeywords = (title: string, description: string): string[] => {
-    const text = `${title} ${description}`.toLowerCase();
-    const words = text.split(/\s+/).filter(word => word.length > 2);
-    return [...new Set(words)]; // Remove duplicates
-  };
-
-  // Filter surveys based on search query
-  const filteredSurveys = surveys.filter(survey => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase().trim();
-    
-    // Search by public ID
-    if (survey.publicId.toLowerCase().includes(query)) return true;
-    
-    // Search by title
-    if (survey.title.toLowerCase().includes(query)) return true;
-    
-    // Search by description
-    if (survey.description.toLowerCase().includes(query)) return true;
-    
-    // Search by keywords
-    if (survey.keywords.some(keyword => keyword.includes(query))) return true;
-    
-    return false;
-  });
-
-  // Calculate real stats from actual survey data
-  const totalResponses = surveys.reduce((sum, survey) => sum + survey.responseCount, 0);
-  const activeSurveys = surveys.filter(survey => survey.isActive).length;
-  const completionRateValue = surveys.length > 0 ? Math.round((totalResponses / (surveys.length * 10)) * 100) : 0; // Assuming 10 is target per survey
-  void completionRateValue;
-
-  // Load surveys from API (Supabase is now mandatory)
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/surveys', { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json?.data)) {
-            setSurveys(json.data);
-          }
-        } else {
-          console.error('Failed to load surveys:', await res.text());
-        }
-      } catch (error) {
-        console.error('Error loading surveys:', error);
-      } finally {
-        setIsLoaded(true);
+    // Delay survey fetching to avoid immediate errors
+    const timer = setTimeout(() => {
+      fetchSurveys()
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [selectedCategory, searchTerm])
+
+  const fetchSurveys = async () => {
+    try {
+      setError('')
+      let query = supabase
+        .from('surveys')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (selectedCategory !== 'all') {
+        query = query.eq('category', selectedCategory)
       }
-    })();
-  }, []);
 
+      if (searchTerm) {
+        query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
+      }
 
+      const { data, error } = await query
 
-  const handleCreateSurvey = async (
-    newSurvey: Omit<Survey, 'id' | 'publicId' | 'createdAt' | 'responseCount' | 'keywords'>
-  ) => {
-    const publicId = generatePublicId();
-    const keywords = extractKeywords(newSurvey.title, newSurvey.description);
-    const survey: Survey = {
-      ...newSurvey,
-      id: Date.now().toString(),
-      publicId,
-      keywords,
-      createdAt: new Date().toISOString(),
-      responseCount: 0,
-    };
+      if (error) {
+        console.error('Supabase error:', error)
+        setError(`Failed to load surveys: ${error.message}`)
+        return
+      }
 
-    const res = await fetch('/api/surveys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(survey),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const saved = (json?.data ?? survey) as Survey;
-      setSurveys(prev => [...prev, saved]);
-    } else {
-      throw new Error(`Failed to create survey: ${await res.text()}`);
+      setSurveys(data || [])
+    } catch (error: any) {
+      console.error('Error fetching surveys:', error)
+      setError(`Failed to load surveys: ${error.message}`)
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
-  const handleViewSurvey = (surveyId: string) => {
-    const survey = surveys.find(s => s.id === surveyId);
-    if (survey) {
-      setSelectedSurvey(survey);
-    }
-  };
+  const filteredSurveys = surveys.filter(survey => {
+    const matchesSearch = searchTerm === '' ||
+      survey.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      survey.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      survey.hashtags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
 
-  const handleViewStats = (surveyId: string) => {
-    const survey = surveys.find(s => s.id === surveyId);
-    if (survey) {
-      setStatsSurvey(survey);
-      setShowStats(true);
-    }
-  };
+    const matchesCategory = selectedCategory === 'all' || survey.category === selectedCategory
 
-  const handleViewResponses = (surveyId: string) => {
-    const survey = surveys.find(s => s.id === surveyId);
-    if (survey) {
-      setResponsesSurvey(survey);
-    }
-  };
-
-  const handleSurveySubmit = async (
-    responses: Record<string, unknown>,
-    arcium?: { queueSig: string; finalizeSig: string; decryptedResponse?: string }
-  ) => {
-    if (!selectedSurvey) return;
-    const payload = {
-      timestamp: new Date().toISOString(),
-      responses,
-      arcium,
-    };
-    const res = await fetch(`/api/surveys/${selectedSurvey.id}/responses`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(`Failed to submit response: ${await res.text()}`);
-    setSurveys(prev =>
-      prev.map(survey =>
-        survey.id === selectedSurvey.id
-          ? { ...survey, responseCount: survey.responseCount + 1 }
-          : survey
-      )
-    );
-    setSelectedSurvey(null);
-  };
-
-  const handleDeleteSurvey = async (surveyId: string) => {
-    const res = await fetch(`/api/surveys/${surveyId}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Failed to delete survey: ${await res.text()}`);
-    setSurveys(prev => prev.filter(s => s.id !== surveyId));
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      // You could add a toast notification here
-    }).catch(err => {
-      console.error('Failed to copy to clipboard:', err);
-    });
-  };
-
-
+    return matchesSearch && matchesCategory
+  })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold">SX</span>
-              </div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Survey X</h1>
-            </div>
-            <WalletMultiButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Create, Share, and Analyze Surveys
-          </h2>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Build powerful surveys with blockchain-powered privacy and get real-time insights from your audience.
+    <div className="min-h-screen">
+      {/* Hero Section */}
+      <section className="bg-gradient-to-br from-blue-600 to-purple-700 text-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-4xl sm:text-6xl font-bold mb-6">
+            Private Surveys on Solana
+          </h1>
+          <p className="text-xl sm:text-2xl mb-8 text-blue-100 max-w-3xl mx-auto">
+            Create and respond to encrypted surveys with privacy-preserving MPC technology powered by Arcium
           </p>
-        </div>
 
-        {/* Devnet quick action removed */}
-
-        {/* Real Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📊</span>
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            {connected ? (
+              <>
+                <Link
+                  href="/create"
+                  className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Survey
+                </Link>
+                                       <Link
+                         href="/#surveys"
+                         className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
+                       >
+                         Browse Surveys
+                       </Link>
+              </>
+            ) : (
+              <div className="bg-white p-2 rounded-lg">
+                <WalletMultiButton className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0" />
               </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {surveys.length}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Total Surveys</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">👥</span>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {totalResponses}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Total Responses</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📈</span>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {activeSurveys}
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Active Surveys</div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
+      </section>
 
-        {/* Tab Navigation */}
-        <div className="mb-8">
-          <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit mx-auto">
-            <button
-              onClick={() => setActiveTab('create')}
-              className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'create'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
+      {/* Features Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Why Survey-X?</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+              Experience the future of survey taking with privacy-preserving technology
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center p-6 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow">
+              <Shield className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Privacy First</h3>
+              <p className="text-gray-600">
+                Your responses are encrypted and processed using MPC technology. No one can see your answers.
+              </p>
+            </div>
+
+            <div className="text-center p-6 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow">
+              <Zap className="w-12 h-12 text-green-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Fast & Secure</h3>
+              <p className="text-gray-600">
+                Powered by Arcium's confidential computing on Solana for lightning-fast, secure processing.
+              </p>
+            </div>
+
+            <div className="text-center p-6 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow">
+              <TrendingUp className="w-12 h-12 text-purple-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Rich Analytics</h3>
+              <p className="text-gray-600">
+                Get detailed insights from survey responses while maintaining complete privacy.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Error Display */}
+      {error && (
+        <section className="py-8 bg-red-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-700">{error}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Recent Surveys Section */}
+      <section id="surveys" className="py-16 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Recent Surveys</h2>
+            <p className="text-lg text-gray-600">Discover what people are asking</p>
+          </div>
+
+          {/* Search and Filter */}
+          <div className="mb-8 flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search surveys..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 placeholder-gray-500 bg-white"
+              />
+            </div>
+
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 bg-white"
             >
-              Create Survey
-            </button>
-            <button
-              onClick={() => setActiveTab('browse')}
-              className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'browse'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              Browse Surveys
-            </button>
+              {categories.map(category => (
+                <option key={category} value={category}>
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
 
-        {/* Create Survey Tab */}
-        {activeTab === 'create' && (
-          <div className="mb-8">
-            <SurveyCreator onCreateSurvey={handleCreateSurvey} />
-          </div>
-        )}
-
-        {/* Browse Surveys Tab */}
-        {activeTab === 'browse' && (
-          <div className="mb-8">
-            <div className="max-w-md mx-auto mb-6">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">🔍</span>
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search by survey ID, title, or keywords..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+          {/* Survey Cards */}
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading surveys...</p>
             </div>
-          </div>
-        )}
+          ) : filteredSurveys.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No surveys found</h3>
+              <p className="text-gray-600 mb-4">
+                {searchTerm || selectedCategory !== 'all'
+                  ? 'Try adjusting your search or filter criteria'
+                  : 'Be the first to create a survey!'}
+              </p>
+              {connected && (
+                <Link
+                  href="/create"
+                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Survey
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredSurveys.map((survey) => (
+                <div key={survey.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                      {survey.category}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {survey.response_count} responses
+                    </span>
+                  </div>
 
-        {/* Survey List */}
-        <div>
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-            {activeTab === 'create' ? `Your Surveys (${surveys.length})` : `Available Surveys (${filteredSurveys.length})`}
-          </h3>
-          <SurveyList
-            surveys={activeTab === 'create' ? surveys : filteredSurveys}
-            onViewSurvey={handleViewSurvey}
-            onViewStats={handleViewStats}
-            onViewResponses={handleViewResponses}
-            onDeleteSurvey={activeTab === 'create' ? handleDeleteSurvey : undefined}
-            onCopyId={copyToClipboard}
-            showPublicId={true}
-          />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+                    {survey.title}
+                  </h3>
+
+                  <p className="text-gray-600 mb-4 line-clamp-3">
+                    {survey.description}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {survey.hashtags?.slice(0, 3).map((tag, index) => (
+                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-500">
+                      {survey.question_count} questions
+                    </span>
+                    <Link
+                      href={`/surveys/${survey.survey_id}`}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    >
+                      Take Survey
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </main>
-
-      {/* Modals */}
-      {selectedSurvey && (
-        <SurveyResponse
-          survey={selectedSurvey}
-          onSubmit={handleSurveySubmit}
-          onClose={() => setSelectedSurvey(null)}
-        />
-      )}
-
-      {showStats && statsSurvey && (
-        <SurveyStats
-          surveyTitle={statsSurvey.title}
-          stats={{
-            totalResponses: statsSurvey.responseCount,
-            completionRate: Math.round((statsSurvey.responseCount / 10) * 100), // Assuming target is 10
-            averageTime: 4.2, // This would be calculated from actual response times
-            questionStats: statsSurvey.questions.map(q => ({
-              questionId: q.id,
-              questionText: q.text,
-              responseCount: statsSurvey.responseCount,
-              // Add real response data here when available
-            }))
-          }}
-          onClose={() => {
-            setShowStats(false);
-            setStatsSurvey(null);
-          }}
-        />
-      )}
-
-      {responsesSurvey && (
-        <SurveyResponsesViewer
-          surveyId={responsesSurvey.id}
-          surveyTitle={responsesSurvey.title}
-          onClose={() => setResponsesSurvey(null)}
-        />
-      )}
-
-      {/* Sliding Footer */}
-      <footer className="fixed bottom-0 left-0 w-full h-16 overflow-hidden pointer-events-none z-50">
-        <div className="sliding-footer flex items-center justify-center h-full">
-          <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-2 rounded-full shadow-lg font-semibold text-lg whitespace-nowrap">
-            ⚡ Powered by Arcium
-          </div>
-        </div>
-      </footer>
+      </section>
     </div>
-  );
+  )
 }
