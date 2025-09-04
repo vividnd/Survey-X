@@ -8,8 +8,6 @@ export const CLUSTER_OFFSET: number = Number(
 
 export const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ||
-  (process.env.NEXT_PUBLIC_HELIUS_API_KEY
-    ? `https://devnet.helius-rpc.com/?api-key=${process.env.NEXT_PUBLIC_HELIUS_API_KEY}`
-    : undefined);
+  'https://api.devnet.solana.com';
 
 

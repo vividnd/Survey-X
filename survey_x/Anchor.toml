@@ -18,7 +18,7 @@ url = "https://api.apr.dev"
 [provider]
 cluster = "devnet"
 wallet = "~/.config/solana/id.json"
-rpc_url = "https://devnet.helius-rpc.com/?api-key=9ad422af-4f8a-4886-b124-77ad76ad683d"
+rpc_url = "https://api.devnet.solana.com"
 
 [scripts]
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

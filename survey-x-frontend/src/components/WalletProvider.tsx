@@ -17,17 +17,13 @@ interface WalletProviderProps {
 export function WalletProvider({ children }: WalletProviderProps) {
   const network = WalletAdapterNetwork.Devnet;
   const endpoint = useMemo(() => {
-    // Prefer explicit RPC URL if provided (e.g., Helius)
+    // Prefer explicit RPC URL if provided
     const envUrl = process.env.NEXT_PUBLIC_RPC_URL;
     if (envUrl && envUrl.length > 0) return envUrl;
 
-    const heliusKey = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
-    if (heliusKey && heliusKey.length > 0) {
-      return `https://devnet.helius-rpc.com/?api-key=${heliusKey}`;
-    }
-
-    return clusterApiUrl(network);
-  }, [network]);
+    // Default to Solana devnet
+    return 'https://api.devnet.solana.com';
+  }, []);
 
   const wallets = useMemo(
     () => [new PhantomWalletAdapter()],
