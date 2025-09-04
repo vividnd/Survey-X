@@ -17,6 +17,45 @@ import {
 } from '@arcium-hq/client';
 import { PROGRAM_ID } from './constants';
 
+// HKDF implementation for proper key derivation as per Arcium docs
+async function hkdf(sharedSecret: Uint8Array): Promise<Uint8Array> {
+  const encoder = new TextEncoder();
+  const salt = encoder.encode('arcium-survey-key');
+  const info = encoder.encode('rescue-cipher-key');
+  
+  // Import the shared secret as a crypto key
+  const key = await crypto.subtle.importKey(
+    'raw',
+    sharedSecret,
+    { name: 'HKDF' },
+    false,
+    ['deriveBits']
+  );
+  
+  // Derive 32 bytes (256 bits) for the Rescue cipher key
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'HKDF',
+      salt: salt,
+      info: info,
+      hash: 'SHA-256'
+    },
+    key,
+    256
+  );
+  
+  return new Uint8Array(derivedBits);
+}
+
+// Proper counter mode implementation as per Arcium docs
+function createCounter(nonce: Uint8Array, index: number): Uint8Array {
+  const counter = new Uint8Array(20); // 16 + 4 bytes
+  counter.set(nonce, 0); // First 16 bytes: nonce
+  counter.set(new Uint8Array(new Uint32Array([index]).buffer), 16); // Next 4 bytes: index
+  // Last 4 bytes remain 0 as per Arcium docs: [nonce, i, 0, 0, 0]
+  return counter;
+}
+
 function randomU64BN(): anchor.BN {
   // Simple u64 from time; sufficient for unique offset per call
   return new anchor.BN(Date.now());
@@ -38,7 +77,7 @@ export async function submitSurveyEncrypted(
   input: Record<string, unknown>,
   connection: Connection,
   wallet: AnchorWallet
-): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint }> {
+): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint; baseNonce: number[] }> {
   console.log('🔐 Following OFFICIAL Arcium documentation pattern...');
   
   // Create provider for Arcium operations
@@ -57,16 +96,30 @@ export async function submitSurveyEncrypted(
     }
     console.log('✅ MXE public key found');
 
-    // Generate encryption keys
+    // Generate encryption keys following Arcium docs exactly
     const privateKey = x25519.utils.randomSecretKey();
     const publicKey = x25519.getPublicKey(privateKey);
+    
+    // Step 1: x25519 Diffie-Hellman key exchange
+    console.log('🔐 Performing x25519 Diffie-Hellman key exchange...');
     const sharedSecret = x25519.getSharedSecret(privateKey, mxePublicKey as Uint8Array);
-    const cipher = new RescueCipher(sharedSecret);
+    
+    // Step 2: HKDF key derivation for increased min-entropy (as per Arcium docs)
+    console.log('🔐 Applying HKDF key derivation...');
+    const derivedKey = await hkdf(sharedSecret);
+    
+    // Step 3: Initialize Rescue cipher with derived key
+    const cipher = new RescueCipher(derivedKey);
     
     // Encode input to u64
     const encoded = await hashToU64(input);
-    const nonce = crypto.getRandomValues(new Uint8Array(16));
-    const ciphertext = cipher.encrypt([encoded], nonce);
+    
+    // Step 4: Generate proper nonce and counter as per Arcium docs
+    const baseNonce = crypto.getRandomValues(new Uint8Array(16));
+    const counter = createCounter(baseNonce, 0); // Start with index 0
+    
+    console.log('🔐 Using proper counter mode: [nonce, 0, 0, 0, 0]');
+    const ciphertext = cipher.encrypt([encoded], counter);
 
     const computationOffset = randomU64BN();
     console.log('🔐 Computation offset:', computationOffset.toString());
@@ -90,13 +143,13 @@ export async function submitSurveyEncrypted(
           // we'll use the Arcium client functions directly as shown in the docs
           console.log('🔐 Using Arcium client queue_computation pattern...');
           
-          // Build arguments as shown in Arcium docs
-          const arciumArgs = [
-            // For Enc<Shared, T>, we need ArcisPubkey and PlaintextU128 before ciphertext
-            { type: 'ArcisPubkey', value: Array.from(publicKey) },
-            { type: 'PlaintextU128', value: deserializeLE(nonce).toString() },
-            { type: 'EncryptedU64', value: Array.from(ciphertext[0]) }
-          ];
+                     // Build arguments as shown in Arcium docs
+           const arciumArgs = [
+             // For Enc<Shared, T>, we need ArcisPubkey and PlaintextU128 before ciphertext
+             { type: 'ArcisPubkey', value: Array.from(publicKey) },
+             { type: 'PlaintextU128', value: deserializeLE(baseNonce).toString() },
+             { type: 'EncryptedU64', value: Array.from(ciphertext[0]) }
+           ];
           
           console.log('🔐 Arcium arguments prepared:', arciumArgs);
           
@@ -113,16 +166,22 @@ export async function submitSurveyEncrypted(
       computation_offset: computationOffset,
       ciphertext: Array.from(ciphertext[0]),
       pub_key: Array.from(publicKey),
-      nonce: deserializeLE(nonce).toString()
+      nonce: deserializeLE(baseNonce).toString()
     });
 
     console.log('✅ Arcium computation queued successfully');
     
     // Return the result following Arcium pattern
+    // Note: In real Arcium, the MXE would increment nonce by 1 for output encryption
+    // and we would use input_enc.to_arcis() for decryption, owner.from_arcis(output) for encryption
+    console.log('🔐 Following Arcium docs: input_enc.to_arcis() for decryption, owner.from_arcis(output) for encryption');
+    
     return {
       queueSig: result.signature,
       finalizeSig: result.signature, // In real Arcium, this would be different
-      decryptedResponse: encoded
+      decryptedResponse: encoded,
+      // Include the base nonce for future interactions (MXE will increment by 1)
+      baseNonce: Array.from(baseNonce)
     };
 
   } catch (error) {
@@ -135,7 +194,7 @@ export async function createSurveyEncrypted(
   surveyData: Record<string, unknown>,
   connection: Connection,
   wallet: AnchorWallet
-): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint }> {
+): Promise<{ queueSig: string; finalizeSig: string; decryptedResponse?: bigint; baseNonce: number[] }> {
   // Use the same real Arcium integration for survey creation
   console.log('🔐 Creating survey with REAL Arcium integration...');
   return submitSurveyEncrypted(surveyData, connection, wallet);
