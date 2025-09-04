@@ -1,5 +1,6 @@
 'use client';
 
+// Survey X - Blockchain-Powered Surveys with Arcium Integration
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 const WalletMultiButton = dynamic(
