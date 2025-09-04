@@ -1,8 +1,9 @@
 'use client';
 
-// Survey X - Blockchain-Powered Surveys with Arcium Integration
-import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
+        // Survey X - Blockchain-Powered Surveys with Arcium Integration
+        // Trigger Vercel redeploy with latest fixes
+        import { useState, useEffect } from 'react';
+        import dynamic from 'next/dynamic';
 const WalletMultiButton = dynamic(
   () => import('@solana/wallet-adapter-react-ui').then((m) => m.WalletMultiButton),
   { ssr: false }
