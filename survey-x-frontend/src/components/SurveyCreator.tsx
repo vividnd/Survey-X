@@ -122,7 +122,7 @@ export function SurveyCreator({ onCreateSurvey }: SurveyCreatorProps) {
       // Only save to database after successful blockchain transaction
       await onCreateSurvey(surveyData);
       
-      alert('🎉 SURVEY CREATED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Ready for responses');
+      alert('🎉 SURVEY CREATED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Ready for responses\n\n✨ Your survey is now live and ready to collect responses!');
       setIsCreating(false);
       reset();
     } catch (error) {

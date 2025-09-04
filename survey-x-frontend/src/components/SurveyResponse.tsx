@@ -138,7 +138,7 @@ export function SurveyResponse({ survey, onSubmit, onClose }: SurveyResponseProp
     // Only save to database after successful blockchain transaction
     try {
       await onSubmit(allResponses, arciumMeta);
-      alert('🎉 RESPONSE SUBMITTED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Your privacy is protected');
+      alert('🎉 RESPONSE SUBMITTED SUCCESSFULLY!\n\n✅ Encrypted on Arcium Network\n✅ Stored in database\n✅ Your privacy is protected\n\n🎯 Thank you for participating in this survey!');
       onClose();
     } catch (error) {
       console.error('❌ Database submission failed:', error);

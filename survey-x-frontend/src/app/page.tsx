@@ -1,7 +1,7 @@
 'use client';
 
         // Survey X - Blockchain-Powered Surveys with Arcium Integration
-        // Trigger Vercel redeploy with latest fixes
+        // Trigger Vercel redeploy with latest fixes and improved popups
         import { useState, useEffect } from 'react';
         import dynamic from 'next/dynamic';
 const WalletMultiButton = dynamic(
