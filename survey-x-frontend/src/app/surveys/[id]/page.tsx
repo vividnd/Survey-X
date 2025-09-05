@@ -200,30 +200,40 @@ export default function SurveyResponsePage() {
       const walletInterface = {
         publicKey,
         signTransaction: async (transaction: any) => {
-          if (!window.solana) {
-            throw new Error('Phantom wallet not found')
-          }
-          if (!window.solana.signTransaction) {
-            throw new Error('Phantom wallet signTransaction method not available')
-          }
+          try {
+            if (!window.solana) {
+              throw new Error('Phantom wallet not found')
+            }
+            if (!window.solana.signTransaction) {
+              throw new Error('Phantom wallet signTransaction method not available')
+            }
 
-          const signed = await window.solana.signTransaction(transaction)
-          return signed
+            const signed = await window.solana.signTransaction(transaction)
+            return signed
+          } catch (error) {
+            console.error('Error signing transaction:', error)
+            throw new Error('Failed to sign transaction. Please try again.')
+          }
         },
         signAllTransactions: async (transactions: any[]) => {
-          if (!window.solana) {
-            throw new Error('Phantom wallet not found')
+          try {
+            if (!window.solana) {
+              throw new Error('Phantom wallet not found')
+            }
+            if (!window.solana.signTransaction) {
+              throw new Error('Phantom wallet signTransaction method not available')
+            }
+            
+            const signedTransactions = []
+            for (const transaction of transactions) {
+              const signed = await window.solana.signTransaction(transaction)
+              signedTransactions.push(signed)
+            }
+            return signedTransactions
+          } catch (error) {
+            console.error('Error signing transactions:', error)
+            throw new Error('Failed to sign transactions. Please try again.')
           }
-          if (!window.solana.signTransaction) {
-            throw new Error('Phantom wallet signTransaction method not available')
-          }
-          
-          const signedTransactions = []
-          for (const transaction of transactions) {
-            const signed = await window.solana.signTransaction(transaction)
-            signedTransactions.push(signed)
-          }
-          return signedTransactions
         }
       }
 
@@ -241,11 +251,15 @@ export default function SurveyResponsePage() {
       const result = await surveyService.submitResponse(surveyId, responsesArray)
 
       setSuccess(`✅ Response submitted successfully! Transaction: ${result.transactionSignature.substring(0, 8)}...`)
-
-      // Redirect to home after success
-      setTimeout(() => {
-        window.location.href = '/'
-      }, 3000)
+      
+      // Update the hasResponded state to show the user has responded
+      setHasResponded(true)
+      
+      // Clear the form
+      setResponses({})
+      
+      // Don't redirect - let the user stay on the page to see the success message
+      // and potentially view responses if they're the creator
 
     } catch (err: any) {
       console.error('Error submitting response:', err)
