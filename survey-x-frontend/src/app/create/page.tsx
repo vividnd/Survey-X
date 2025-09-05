@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { useState, useEffect } from 'react'
+import WalletButtonWrapper from '@/components/WalletButtonWrapper'
+import { useWalletSafe } from '@/hooks/useWalletSafe'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, X, Save, AlertCircle, CheckCircle, Wallet } from 'lucide-react'
@@ -11,10 +11,12 @@ import { PublicKey } from '@solana/web3.js'
 
 // Phantom wallet interface
 interface PhantomProvider {
-  connect(): Promise<{ publicKey: { toBytes(): Uint8Array } }>
+  isPhantom?: boolean
+  isConnected: boolean
+  publicKey: PublicKey | null
+  connect(): Promise<{ publicKey: PublicKey }>
   signTransaction(transaction: any): Promise<any>
   signAllTransactions(transactions: any[]): Promise<any[]>
-  publicKey?: { toBytes(): Uint8Array }
 }
 
 declare global {
@@ -37,7 +39,7 @@ const categories = [
 ]
 
 export default function CreateSurveyPage() {
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected } = useWalletSafe()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -128,6 +130,25 @@ export default function CreateSurveyPage() {
       return
     }
 
+    // Additional wallet checks
+    if (!window.solana || !window.solana.isPhantom) {
+      console.log('❌ Phantom wallet not found')
+      setError('Phantom wallet not found. Please install Phantom wallet.')
+      return
+    }
+
+    if (!window.solana.isConnected) {
+      console.log('❌ Phantom wallet not connected')
+      setError('Phantom wallet is not connected. Please connect your wallet.')
+      return
+    }
+
+    if (!window.solana.publicKey) {
+      console.log('❌ Phantom wallet locked')
+      setError('Phantom wallet is locked. Please unlock your wallet.')
+      return
+    }
+
     if (!title.trim()) {
       console.log('❌ No title')
       setError('Survey title is required')
@@ -198,54 +219,86 @@ export default function CreateSurveyPage() {
         publicKey: publicKey, // This will be updated to the connected wallet
         signTransaction: async (transaction: any) => {
           console.log('🔐 Requesting transaction signature from Phantom...')
-          if (!window.solana) {
-            console.error('❌ Phantom wallet not found')
-            throw new Error('Phantom wallet not found')
+          
+          // Check if Phantom is available
+          if (!window.solana || !window.solana.isPhantom) {
+            console.error('❌ Phantom wallet not found or not available')
+            throw new Error('Phantom wallet not found. Please install Phantom wallet.')
           }
 
-          // Check if we have permission and request if needed
-          console.log('🔍 Checking Phantom permissions...')
+          // Check if wallet is connected
+          if (!window.solana.isConnected) {
+            console.log('🔗 Phantom not connected, attempting to connect...')
+            try {
+              await window.solana.connect()
+              console.log('✅ Phantom connected successfully')
+            } catch (error) {
+              console.error('❌ Failed to connect to Phantom:', error)
+              throw new Error('Failed to connect to Phantom wallet. Please make sure it is unlocked.')
+            }
+          }
+
+          // Verify we have a public key
+          if (!window.solana.publicKey) {
+            console.error('❌ No public key available from Phantom')
+            throw new Error('No public key available. Please make sure Phantom is connected and unlocked.')
+          }
+
+          console.log('✅ Phantom is connected:', window.solana.publicKey.toString())
+          
+          // Set the fee payer to the connected wallet
+          transaction.feePayer = window.solana.publicKey
+          
+          console.log('🔍 Transaction details before signing:')
+          console.log('- Fee payer:', transaction.feePayer?.toString())
+          console.log('- Recent blockhash:', transaction.recentBlockhash)
+          console.log('- Instructions:', transaction.instructions.length)
+          
           try {
-            // Try to ensure connection first
-            const response = await window.solana.connect()
-            console.log('✅ Phantom connected:', response.publicKey.toString())
-            
-            // Set the fee payer to the actually connected wallet
-            const connectedWallet = response.publicKey
-            transaction.feePayer = connectedWallet
-            
-            // Update the wallet interface to use the connected wallet
-            // Convert Phantom public key to Solana PublicKey
-            const solanaPublicKey = new PublicKey(connectedWallet.toBytes())
-            walletInterface.publicKey = solanaPublicKey
-            
-            console.log('🔍 Wallet verification:')
-            console.log('- Expected wallet:', publicKey.toString())
-            console.log('- Connected wallet:', solanaPublicKey.toString())
-            console.log('- Wallet match:', publicKey.equals(solanaPublicKey))
-            
             console.log('📝 Signing transaction...')
-            console.log('🔍 Transaction details before signing:')
-            console.log('- Fee payer:', transaction.feePayer?.toString())
-            console.log('- Recent blockhash:', transaction.recentBlockhash)
-            console.log('- Instructions:', transaction.instructions.length)
-            
             const signed = await window.solana.signTransaction(transaction)
-            console.log('✅ Transaction signed!')
+            console.log('✅ Transaction signed successfully!')
             return signed
           } catch (error) {
             console.error('❌ Error during transaction signing:', error)
             if (error instanceof Error) {
               console.error('❌ Error details:', error.message)
+              if (error.message.includes('User rejected')) {
+                throw new Error('Transaction was rejected by user. Please try again.')
+              } else if (error.message.includes('locked')) {
+                throw new Error('Phantom wallet is locked. Please unlock it and try again.')
+              } else if (error.message.includes('not connected')) {
+                throw new Error('Phantom wallet is not connected. Please connect and try again.')
+              }
             }
             throw error
           }
         },
         signAllTransactions: async (transactions: any[]) => {
           console.log('🔐 Requesting multiple transaction signatures from Phantom...')
-          if (!window.solana) {
-            console.error('❌ Phantom wallet not found')
-            throw new Error('Phantom wallet not found')
+          
+          // Check if Phantom is available
+          if (!window.solana || !window.solana.isPhantom) {
+            console.error('❌ Phantom wallet not found or not available')
+            throw new Error('Phantom wallet not found. Please install Phantom wallet.')
+          }
+
+          // Check if wallet is connected
+          if (!window.solana.isConnected) {
+            console.log('🔗 Phantom not connected, attempting to connect...')
+            try {
+              await window.solana.connect()
+              console.log('✅ Phantom connected successfully')
+            } catch (error) {
+              console.error('❌ Failed to connect to Phantom:', error)
+              throw new Error('Failed to connect to Phantom wallet. Please make sure it is unlocked.')
+            }
+          }
+
+          // Verify we have a public key
+          if (!window.solana.publicKey) {
+            console.error('❌ No public key available from Phantom')
+            throw new Error('No public key available. Please make sure Phantom is connected and unlocked.')
           }
           
           try {
@@ -302,7 +355,7 @@ Would you like to test your survey by answering it yourself?`)
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 mb-4">Create Survey</h1>
           <p className="text-gray-600 mb-8">Connect your wallet to create encrypted surveys</p>
-          <WalletMultiButton className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0" />
+          <WalletButtonWrapper className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0" />
         </div>
       </div>
     )

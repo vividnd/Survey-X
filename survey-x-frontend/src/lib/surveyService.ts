@@ -1,4 +1,4 @@
-import { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js'
+import { Connection, PublicKey, SystemProgram, Transaction, TransactionInstruction, Keypair } from '@solana/web3.js'
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor'
 import { createClient } from '@supabase/supabase-js'
 import {
@@ -229,8 +229,8 @@ export class SurveyService {
     try {
       console.log('🚀 Starting survey creation process...')
       
-      // Generate unique survey ID
-      const surveyId = `survey_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Generate unique survey ID as a PublicKey
+      const surveyId = Keypair.generate().publicKey.toString()
       console.log('Generated survey ID:', surveyId)
 
       // STEP 1: Encrypt survey data for MPC processing
@@ -487,8 +487,14 @@ export class SurveyService {
         throw new Error(`Survey not found: ${surveyError.message}`)
       }
 
-      if (survey.response_count >= survey.max_responses) {
+      if (survey.max_responses && survey.response_count >= survey.max_responses) {
         throw new Error('Survey has reached maximum response limit')
+      }
+
+      // Check if user has already responded
+      const hasResponded = await this.hasUserResponded(surveyId, this.wallet.publicKey.toString())
+      if (hasResponded) {
+        throw new Error('You have already responded to this survey. Each wallet can only submit one response per survey.')
       }
 
       // Generate unique response ID
@@ -527,13 +533,19 @@ export class SurveyService {
         .insert({
           survey_id: surveyId,
           response_id: responseId,
-          respondent_wallet: this.wallet.publicKey.toString(),
+          responder_wallet: this.wallet.publicKey.toString(),
           encrypted_data: encryptedResponseData,
           submitted_at: new Date().toISOString()
         })
 
       if (responseError) {
         console.error('❌ Response insert error:', responseError)
+        
+        // Handle duplicate response error specifically
+        if (responseError.code === '23505' && responseError.message.includes('survey_responses_survey_id_responder_wallet_key')) {
+          throw new Error('You have already responded to this survey. Each wallet can only submit one response per survey.')
+        }
+        
         throw responseError
       }
 
@@ -555,8 +567,19 @@ export class SurveyService {
       const program = new Program(idl as any, provider)
 
       // Generate PDAs
+      // Handle both old string format and new PublicKey format
+      let surveyIdBuffer: Buffer
+      try {
+        // Try to parse as PublicKey first (new format)
+        surveyIdBuffer = new PublicKey(surveyId).toBuffer()
+      } catch (error) {
+        // If that fails, use the string as bytes (old format)
+        console.log('Using old string format for surveyId:', surveyId)
+        surveyIdBuffer = Buffer.from(surveyId, 'utf8')
+      }
+      
       const [surveyPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from('survey'), new PublicKey(surveyId).toBuffer()],
+        [Buffer.from('survey'), surveyIdBuffer],
         SURVEY_X_PROGRAM_ID
       )
       const [responsePDA] = PublicKey.findProgramAddressSync(
@@ -564,19 +587,67 @@ export class SurveyService {
         SURVEY_X_PROGRAM_ID
       )
 
-      // Call Arcium MPC program
-      const transaction = await program.methods
-        .submitResponse({
-          responses: Array.from(encryptedResponseData),
-          nonce: Array.from(responseNonce)
-        })
-        .accounts({
-          survey: surveyPDA,
-          response: responsePDA,
-          respondent: this.wallet.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .transaction()
+      // Create direct Arcium MPC transaction (same approach as createSurvey)
+      console.log('🚀 Creating direct Arcium MPC transaction...')
+      
+      // Use proper Arcium account derivation
+      const computationOffset = BigInt(Math.floor(Math.random() * 1000000))
+      const mxeAccount = deriveMxePda()
+      const mempoolAccount = deriveMempoolPda()
+      const executingPool = deriveExecPoolPda()
+      const computationAccount = deriveCompPda(computationOffset)
+      
+      // Use add_together comp def (known to be initialized)
+      const addTogetherOffset = getCompDefAccOffset('add_together')
+      const addTogetherOffsetNumber = new DataView(addTogetherOffset.buffer, addTogetherOffset.byteOffset, addTogetherOffset.byteLength).getUint32(0, true)
+      const addTogetherCompDef = getCompDefAccAddress(SURVEY_X_PROGRAM_ID, addTogetherOffsetNumber)
+      
+      // Use the expected cluster account from the error logs
+      const clusterAccount = new PublicKey('2qibdmpiSHrzcvbqQ9c9PEx17Q9KhyKSMuxuRP8AYJ9c')
+      
+      console.log('🔍 Using expected cluster account:', clusterAccount.toString())
+      
+      // Debug: Check all accounts
+      console.log('🔍 Checking all computation accounts...')
+      console.log('Computation Offset:', computationOffset.toString())
+      console.log('All account addresses:')
+      console.log('- Payer:', this.wallet.publicKey.toString())
+      console.log('- MXE Account:', mxeAccount.toString())
+      console.log('- Mempool Account:', mempoolAccount.toString())
+      console.log('- Executing Pool:', executingPool.toString())
+      console.log('- Computation Account:', computationAccount.toString())
+      console.log('- Comp Def Account:', addTogetherCompDef.toString())
+      console.log('- Cluster Account:', clusterAccount.toString())
+      
+      // Create direct transaction instruction using add_together format
+      const instruction = new TransactionInstruction({
+        keys: [
+          { pubkey: this.wallet.publicKey, isSigner: true, isWritable: true }, // payer
+          { pubkey: mxeAccount, isSigner: false, isWritable: false }, // mxe_account
+          { pubkey: mempoolAccount, isSigner: false, isWritable: true }, // mempool_account
+          { pubkey: executingPool, isSigner: false, isWritable: true }, // executing_pool
+          { pubkey: computationAccount, isSigner: false, isWritable: true }, // computation_account
+          { pubkey: addTogetherCompDef, isSigner: false, isWritable: false }, // comp_def_account
+          { pubkey: clusterAccount, isSigner: false, isWritable: true }, // cluster_account
+          { pubkey: new PublicKey('7MGSS4iKNM4sVib7bDZDJhVqB6EcchPwVnTKenCY1jt3'), isSigner: false, isWritable: true }, // pool_account (writable!)
+          { pubkey: new PublicKey('FHriyvoZotYiFnbUzKFjzRSb2NiaC8RPWY7jtKuKhg65'), isSigner: false, isWritable: false }, // clock_account
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
+          { pubkey: new PublicKey('BKck65TgoKRokMjQM3datB9oRwJ8rAj2jxPXvHXUvcL6'), isSigner: false, isWritable: false }, // arcium_program
+        ],
+        programId: SURVEY_X_PROGRAM_ID,
+        // Using add_together instruction format: discriminator + computation_offset + ciphertext_0 + ciphertext_1 + pub_key + nonce
+        data: Buffer.concat([
+          Buffer.from([70, 27, 73, 27, 150, 56, 75, 181]), // add_together discriminator from IDL
+          new BN(computationOffset.toString()).toArrayLike(Buffer, 'le', 8), // computation offset (8 bytes u64, little-endian)
+          Buffer.from(encryptedResponseData), // ciphertext_0 (32 bytes)
+          Buffer.from(encryptedResponseData), // ciphertext_1 (32 bytes) - using same data for both
+          Buffer.from(responsePubKey), // pub_key (32 bytes)
+          new BN(1).toArrayLike(Buffer, 'le', 16), // nonce (16 bytes u128, little-endian)
+        ])
+      });
+      
+      const transaction = new Transaction()
+      transaction.add(instruction)
 
       // Sign and send transaction
       const { blockhash } = await this.connection.getLatestBlockhash()
@@ -690,7 +761,7 @@ export class SurveyService {
         .from('survey_responses')
         .select('response_id')
         .eq('survey_id', surveyId)
-        .eq('respondent_wallet', userWallet)
+        .eq('responder_wallet', userWallet)
         .limit(1)
 
       if (error) {

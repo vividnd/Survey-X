@@ -2,20 +2,23 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import WalletButtonWrapper from '@/components/WalletButtonWrapper'
+import { useWalletSafe } from '@/hooks/useWalletSafe'
 import { ArrowLeft, Send, CheckCircle, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { SurveyService } from '@/lib/surveyService'
 import type { Survey, SurveyQuestion } from '@/lib/supabase'
+import { PublicKey } from '@solana/web3.js'
 
 // Phantom wallet interface
 interface PhantomProvider {
-  connect(): Promise<{ publicKey: { toBytes(): Uint8Array } }>
+  isPhantom?: boolean
+  isConnected: boolean
+  publicKey: PublicKey | null
+  connect(): Promise<{ publicKey: PublicKey }>
   signTransaction(transaction: any): Promise<any>
   signAllTransactions(transactions: any[]): Promise<any[]>
-  publicKey?: { toBytes(): Uint8Array }
 }
 
 declare global {
@@ -27,7 +30,7 @@ declare global {
 export default function SurveyResponsePage() {
   const params = useParams()
   const surveyId = params.id as string
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected } = useWalletSafe()
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [questions, setQuestions] = useState<SurveyQuestion[]>([])
   const [responses, setResponses] = useState<Record<number, any>>({})
@@ -92,11 +95,12 @@ export default function SurveyResponsePage() {
 
     try {
       const surveyService = new SurveyService()
-
       const hasResponded = await surveyService.hasUserResponded(surveyId, publicKey.toString())
+      console.log('🔍 Response check result:', hasResponded)
       setHasResponded(hasResponded)
     } catch (err) {
       console.error('Error checking response status:', err)
+      setHasResponded(false) // Default to false on error
     }
   }
 
@@ -142,6 +146,12 @@ export default function SurveyResponsePage() {
 
     if (unansweredRequired.length > 0) {
       setError('Please answer all required questions')
+      return
+    }
+
+    // Check if survey is full
+    if (isSurveyFull) {
+      setError('This survey has reached its maximum number of responses')
       return
     }
 
@@ -202,7 +212,10 @@ export default function SurveyResponsePage() {
     } catch (err: any) {
       console.error('Error submitting response:', err)
 
-      if (err.message?.includes('User rejected') || err.message?.includes('cancelled')) {
+      if (err.message?.includes('already responded') || err.message?.includes('duplicate')) {
+        setError('You have already responded to this survey. Each wallet can only submit one response per survey.')
+        setHasResponded(true) // Update the state to show the user has responded
+      } else if (err.message?.includes('User rejected') || err.message?.includes('cancelled')) {
         setError('Transaction was cancelled. Please try again and approve the transaction.')
       } else if (err.message?.includes('insufficient') || err.message?.includes('balance')) {
         setError('Insufficient SOL balance. You need at least 0.0005 SOL to submit a response.')
@@ -342,7 +355,15 @@ export default function SurveyResponsePage() {
         {!hasResponded && (
           <form onSubmit={handleSubmit} className="space-y-6">
             {questions.map((question) => (
-              <div key={question.question_id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div key={question.question_id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative">
+                {/* Purple check mark for answered questions */}
+                {responses[question.question_id] && (
+                  <div className="absolute top-4 right-4 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
                 <div className="mb-4">
                   <h3 className="text-lg font-medium text-gray-900 mb-2">
                     {question.question_text}
@@ -460,7 +481,7 @@ export default function SurveyResponsePage() {
             <p className="text-gray-600 mb-6">
               Connect your Phantom wallet to submit responses to this survey.
             </p>
-            <WalletMultiButton className="!bg-purple-600 hover:!bg-purple-700 !text-white !border-0 !rounded-lg !font-medium !px-6 !py-3" />
+            <WalletButtonWrapper className="!bg-purple-600 hover:!bg-purple-700 !text-white !border-0 !rounded-lg !font-medium !px-6 !py-3" />
           </div>
         )}
       </div>

@@ -1,30 +1,12 @@
 'use client'
 
 import { Menu, X } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
-
-// Dynamically import wallet components to prevent SSR issues
-const WalletMultiButton = dynamic(
-  () => import('@solana/wallet-adapter-react-ui').then(mod => mod.WalletMultiButton),
-  {
-    ssr: false,
-    loading: () => <div className="w-24 h-8 bg-gray-200 rounded animate-pulse" />
-  }
-)
+import WalletButtonWrapper from './WalletButtonWrapper'
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    // Delay mounting to prevent hydration issues
-    const timer = setTimeout(() => {
-      setMounted(true)
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [])
 
   // Render static header first to prevent hydration mismatch
   return (
@@ -50,19 +32,15 @@ export default function Header() {
               Create Survey
             </Link>
 
-            {/* Wallet Button - Only show after mounting to prevent hydration issues */}
-            {mounted && (
-              <div className="ml-4">
-                <WalletMultiButton className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0 !rounded-lg !font-medium !px-4 !py-2 !h-auto" />
-              </div>
-            )}
+            {/* Wallet Button */}
+            <div className="ml-4">
+              <WalletButtonWrapper />
+            </div>
           </nav>
 
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center space-x-2">
-            {mounted && (
-              <WalletMultiButton className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0 !rounded-lg !font-medium !px-3 !py-1 !h-auto !text-sm" />
-            )}
+            <WalletButtonWrapper mobile />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-gray-700 hover:text-blue-600"

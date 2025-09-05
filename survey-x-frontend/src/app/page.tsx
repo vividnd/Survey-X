@@ -1,20 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useWallet } from '@solana/wallet-adapter-react'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { Search, Plus, TrendingUp, Users, Shield, Zap, AlertCircle } from 'lucide-react'
+import WalletButtonWrapper from '@/components/WalletButtonWrapper'
+import { useWalletSafe } from '@/hooks/useWalletSafe'
+import { Search, Plus, TrendingUp, Users, Shield, Zap, AlertCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Survey } from '@/lib/supabase'
 
 export default function HomePage() {
-  const { publicKey, connected } = useWallet()
+  const { publicKey, connected } = useWalletSafe()
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [deletingSurvey, setDeletingSurvey] = useState<string | null>(null)
 
   const categories = [
     'all', 'technology', 'health', 'education', 'entertainment',
@@ -75,6 +76,54 @@ export default function HomePage() {
     return matchesSearch && matchesCategory
   })
 
+  const deleteSurvey = async (surveyId: string) => {
+    if (!publicKey) {
+      setError('Please connect your wallet to delete surveys')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this survey? This action cannot be undone.')) {
+      return
+    }
+
+    setDeletingSurvey(surveyId)
+    try {
+      // First, get the survey to verify ownership
+      const { data: survey, error: fetchError } = await supabase
+        .from('surveys')
+        .select('creator_wallet')
+        .eq('survey_id', surveyId)
+        .single()
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch survey: ${fetchError.message}`)
+      }
+
+      if (survey.creator_wallet !== publicKey.toString()) {
+        throw new Error('You can only delete surveys you created')
+      }
+
+      // Delete the survey
+      const { error: deleteError } = await supabase
+        .from('surveys')
+        .delete()
+        .eq('survey_id', surveyId)
+
+      if (deleteError) {
+        throw new Error(`Failed to delete survey: ${deleteError.message}`)
+      }
+
+      // Remove from local state
+      setSurveys(prev => prev.filter(s => s.survey_id !== surveyId))
+      setError('')
+    } catch (error: any) {
+      console.error('Error deleting survey:', error)
+      setError(error.message)
+    } finally {
+      setDeletingSurvey(null)
+    }
+  }
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -98,16 +147,16 @@ export default function HomePage() {
                   <Plus className="w-5 h-5" />
                   Create Survey
                 </Link>
-                                       <Link
-                         href="/#surveys"
-                         className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
-                       >
-                         Browse Surveys
-                       </Link>
+                <Link
+                  href="/#surveys"
+                  className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors"
+                >
+                  Browse Surveys
+                </Link>
               </>
             ) : (
               <div className="bg-white p-2 rounded-lg">
-                <WalletMultiButton className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0" />
+                <WalletButtonWrapper className="!bg-blue-600 hover:!bg-blue-700 !text-white !border-0" />
               </div>
             )}
           </div>
@@ -256,12 +305,28 @@ export default function HomePage() {
                     <span className="text-sm text-gray-500">
                       {survey.question_count} questions
                     </span>
-                    <Link
-                      href={`/surveys/${survey.survey_id}`}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                    >
-                      Take Survey
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      {connected && publicKey && survey.creator_wallet === publicKey.toString() && (
+                        <button
+                          onClick={() => deleteSurvey(survey.survey_id)}
+                          disabled={deletingSurvey === survey.survey_id}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Delete survey"
+                        >
+                          {deletingSurvey === survey.survey_id ? (
+                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      )}
+                      <Link
+                        href={`/surveys/${survey.survey_id}`}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        Take Survey
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))}
