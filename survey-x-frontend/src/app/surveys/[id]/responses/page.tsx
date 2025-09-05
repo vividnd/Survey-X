@@ -177,6 +177,18 @@ export default function SurveyResponsesPage() {
         responsesCount: responsesData?.length || 0,
         responses: responsesData
       })
+      
+      // Debug: Log each response's response_data
+      responsesData?.forEach((response, index) => {
+        console.log(`Response ${index + 1}:`, {
+          id: response.id,
+          response_id: response.response_id,
+          responder_wallet: response.responder_wallet,
+          response_data: response.response_data,
+          response_data_type: typeof response.response_data,
+          response_data_length: response.response_data ? response.response_data.length : 'null'
+        })
+      })
 
     } catch (err) {
       console.error('Error loading survey data:', err)
@@ -311,6 +323,9 @@ export default function SurveyResponsesPage() {
                 As the survey creator, you can view all submitted responses. Each column shows the answer to the corresponding question. 
                 Responses are also encrypted using Arcium MPC for additional privacy protection.
               </p>
+              <div className="mt-2 text-xs text-green-600">
+                Debug: {responses.length} responses loaded. Check console for detailed response data.
+              </div>
             </div>
           </div>
         </div>
