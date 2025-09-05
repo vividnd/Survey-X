@@ -296,6 +296,25 @@ export default function SurveyResponsesPage() {
           </div>
         </div>
 
+        {/* Encryption Notice */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 text-lg">🔐</span>
+              </div>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">Encrypted Responses</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                All survey responses are encrypted using Arcium MPC (Multi-Party Computation) for maximum privacy. 
+                The actual answers are stored securely on-chain and require MPC decryption to view. 
+                Click "Decrypt" buttons to decrypt individual answers (feature coming soon).
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Responses Table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -336,6 +355,11 @@ export default function SurveyResponsesPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Transaction
                     </th>
+                    {questions.map((question, index) => (
+                      <th key={index} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {question.question_text}
+                      </th>
+                    ))}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
@@ -379,6 +403,24 @@ export default function SurveyResponsesPage() {
                           'N/A'
                         )}
                       </td>
+                      {questions.map((question, index) => (
+                        <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                              🔐 Encrypted
+                            </span>
+                            <button
+                              className="text-blue-600 hover:text-blue-700 text-xs"
+                              onClick={() => {
+                                // TODO: Implement response decryption using Arcium MPC
+                                alert(`Decrypting answer for: "${question.question_text}"\n\nThis requires Arcium MPC decryption which will be implemented in a future update.`)
+                              }}
+                            >
+                              Decrypt
+                            </button>
+                          </div>
+                        </td>
+                      ))}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <button
                           className="text-blue-600 hover:text-blue-700"
