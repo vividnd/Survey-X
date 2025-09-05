@@ -186,7 +186,9 @@ export default function SurveyResponsesPage() {
           firstResponseData: responsesData[0]?.response_data,
           firstResponseDataType: typeof responsesData[0]?.response_data,
           firstResponseDataLength: responsesData[0]?.response_data?.length,
-          firstResponseDataContent: JSON.stringify(responsesData[0]?.response_data, null, 2)
+          firstResponseDataContent: JSON.stringify(responsesData[0]?.response_data, null, 2),
+          firstResponseDataIndex0: responsesData[0]?.response_data?.[0],
+          firstResponseDataIndex0Stringified: JSON.stringify(responsesData[0]?.response_data?.[0], null, 2)
         })
       }
       
@@ -368,7 +370,7 @@ export default function SurveyResponsesPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              {console.log('🔍 Rendering table with', responses.length, 'responses')}
+              {console.log('🔍 TABLE RENDERING: About to render table with', responses.length, 'responses')}
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
