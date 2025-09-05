@@ -70,8 +70,16 @@ export default function SurveyResponsePage() {
       setQuestions(questionsData || [])
       
       // Check if current user is the creator
+      console.log('🔍 Creator check:', {
+        publicKey: publicKey ? publicKey.toString() : 'null',
+        creatorWallet: surveyData.creator_wallet,
+        isCreator: publicKey && surveyData.creator_wallet === publicKey.toString()
+      })
       if (publicKey && surveyData.creator_wallet === publicKey.toString()) {
         setIsCreator(true)
+        console.log('✅ User is the survey creator')
+      } else {
+        console.log('❌ User is not the survey creator')
       }
       
       // Debug: Log questions to see their types
@@ -315,8 +323,11 @@ export default function SurveyResponsePage() {
                 )}
 
                 {/* Creator Actions */}
-                {isCreator && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="text-sm text-gray-500 mb-2">
+                    Debug: isCreator = {isCreator ? 'true' : 'false'}, publicKey = {publicKey ? publicKey.toString() : 'null'}
+                  </div>
+                  {isCreator && (
                     <Link
                       href={`/surveys/${surveyId}/responses`}
                       className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -324,8 +335,13 @@ export default function SurveyResponsePage() {
                       <Users className="w-4 h-4 mr-2" />
                       View Responses ({survey.response_count || 0})
                     </Link>
-                  </div>
-                )}
+                  )}
+                  {!isCreator && (
+                    <div className="text-sm text-gray-500">
+                      View Responses button only appears for survey creators
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

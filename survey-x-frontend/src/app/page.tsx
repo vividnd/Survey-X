@@ -307,18 +307,28 @@ export default function HomePage() {
                     </span>
                     <div className="flex items-center gap-2">
                       {connected && publicKey && survey.creator_wallet === publicKey.toString() && (
-                        <button
-                          onClick={() => deleteSurvey(survey.survey_id)}
-                          disabled={deletingSurvey === survey.survey_id}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Delete survey"
-                        >
-                          {deletingSurvey === survey.survey_id ? (
-                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
+                        <>
+                          <Link
+                            href={`/surveys/${survey.survey_id}/responses`}
+                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                            title="View responses"
+                          >
+                            <Users className="w-4 h-4 inline mr-1" />
+                            Responses
+                          </Link>
+                          <button
+                            onClick={() => deleteSurvey(survey.survey_id)}
+                            disabled={deletingSurvey === survey.survey_id}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Delete survey"
+                          >
+                            {deletingSurvey === survey.survey_id ? (
+                              <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </>
                       )}
                       <Link
                         href={`/surveys/${survey.survey_id}`}
