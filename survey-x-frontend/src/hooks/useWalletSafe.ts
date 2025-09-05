@@ -37,8 +37,7 @@ export function useWalletSafe() {
           const isConnected = window.solana.isConnected
           const publicKey = window.solana.publicKey
           
-          console.log('🔍 Checking Phantom wallet:', { isConnected, publicKey: publicKey ? publicKey.toString() : 'null' })
-          
+          // Only log when state changes
           if (isConnected && publicKey) {
             console.log('✅ Phantom wallet connected:', publicKey.toString())
             setWalletState(prev => ({
@@ -53,11 +52,9 @@ export function useWalletSafe() {
         
         // Check localStorage for wallet connection state
         const storedWalletState = localStorage.getItem('wallet-adapter')
-        console.log('🔍 Checking localStorage wallet-adapter:', storedWalletState)
         if (storedWalletState) {
           try {
             const parsed = JSON.parse(storedWalletState)
-            console.log('📦 Parsed wallet-adapter:', parsed)
             if (parsed.connected && parsed.publicKey) {
               console.log('✅ Found connected wallet in localStorage:', parsed.publicKey)
               setWalletState(prev => ({
@@ -109,10 +106,7 @@ export function useWalletSafe() {
     // Check immediately
     checkWalletState()
     
-    // Set up interval to check wallet state periodically
-    const interval = setInterval(checkWalletState, 1000)
-    
-    // Listen for wallet connection events
+    // Listen for wallet connection events (no interval needed)
     const handleWalletConnect = () => {
       setTimeout(checkWalletState, 100)
     }
@@ -123,7 +117,6 @@ export function useWalletSafe() {
     }
 
     return () => {
-      clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('wallet-adapter-connect', handleWalletConnect)
         window.removeEventListener('wallet-adapter-disconnect', handleWalletConnect)
