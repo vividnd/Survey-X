@@ -382,7 +382,13 @@ export default function SurveyResponsesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {responses.map((response) => (
+                  {responses.map((response, responseIndex) => {
+                    console.log(`🔍 Rendering response ${responseIndex + 1}:`, {
+                      responseId: response.response_id,
+                      responseData: response.response_data,
+                      responseDataLength: response.response_data ? response.response_data.length : 'null'
+                    });
+                    return (
                     <tr key={response.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
@@ -425,13 +431,15 @@ export default function SurveyResponsesPage() {
                           ? response.response_data[index] 
                           : null;
                         
-                        // Debug logging
-                        console.log(`Question ${index} response:`, {
+                        // Debug logging - Enhanced
+                        console.log(`🔍 Question ${index} response:`, {
                           question: question.question_text,
                           questionResponse,
                           response_data: response.response_data,
                           response_data_length: response.response_data ? response.response_data.length : 'null',
-                          response_data_full: JSON.stringify(response.response_data, null, 2)
+                          response_data_full: JSON.stringify(response.response_data, null, 2),
+                          response_data_index_0: response.response_data ? response.response_data[0] : 'null',
+                          response_data_index_1: response.response_data ? response.response_data[1] : 'null'
                         });
                         
                         return (
@@ -481,7 +489,8 @@ export default function SurveyResponsesPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
