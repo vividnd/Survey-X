@@ -369,8 +369,10 @@ export default function SurveyResponsesPage() {
               </div>
             </div>
           ) : (
+            (() => {
+              console.log('🔍 TABLE RENDERING: About to render table with', responses.length, 'responses')
+              return (
             <div className="overflow-x-auto">
-              {console.log('🔍 TABLE RENDERING: About to render table with', responses.length, 'responses')}
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -509,6 +511,8 @@ export default function SurveyResponsesPage() {
                 </tbody>
               </table>
             </div>
+            )
+            })()
           )}
         </div>
 
