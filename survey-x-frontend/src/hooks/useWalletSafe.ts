@@ -27,7 +27,7 @@ export function useWalletSafe() {
           const isConnected = window.solana.isConnected
           const publicKey = window.solana.publicKey
           
-          console.log('🔍 Checking Phantom wallet:', { isConnected, publicKey: publicKey?.toString() })
+          console.log('🔍 Checking Phantom wallet:', { isConnected, publicKey: publicKey ? publicKey.toString() : 'null' })
           
           if (isConnected && publicKey) {
             console.log('✅ Phantom wallet connected:', publicKey.toString())

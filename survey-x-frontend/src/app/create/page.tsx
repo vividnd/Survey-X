@@ -107,7 +107,7 @@ export default function CreateSurveyPage() {
 
     console.log('🚀 Form submitted!')
     console.log('Connected:', connected)
-    console.log('Public key:', publicKey?.toString())
+    console.log('Public key:', publicKey ? publicKey.toString() : 'null')
 
     if (!connected || !publicKey) {
       console.log('❌ Wallet not connected')
