@@ -39,6 +39,28 @@ export default function SurveyResponsePage() {
     }
   }, [surveyId, publicKey])
 
+  // Re-check creator status when wallet connection changes
+  useEffect(() => {
+    if (survey && publicKey) {
+      console.log('🔍 Re-checking creator status:', {
+        publicKey: publicKey.toString(),
+        creatorWallet: survey.creator_wallet,
+        isCreator: survey.creator_wallet === publicKey.toString()
+      })
+      
+      if (survey.creator_wallet === publicKey.toString()) {
+        setIsCreator(true)
+        console.log('✅ User is the survey creator (re-check)')
+      } else {
+        setIsCreator(false)
+        console.log('❌ User is not the survey creator (re-check)')
+      }
+    } else if (survey && !publicKey) {
+      setIsCreator(false)
+      console.log('❌ No wallet connected, not creator')
+    }
+  }, [survey, publicKey])
+
   const [isSurveyFull, setIsSurveyFull] = useState(false)
 
   const loadSurvey = async () => {
@@ -327,6 +349,9 @@ export default function SurveyResponsePage() {
                   <div className="text-sm text-gray-500 mb-2">
                     Debug: isCreator = {isCreator ? 'true' : 'false'}, publicKey = {publicKey ? publicKey.toString() : 'null'}
                   </div>
+                  <div className="text-xs text-gray-400 mb-2">
+                    Creator Wallet: {survey.creator_wallet}
+                  </div>
                   {isCreator && (
                     <Link
                       href={`/surveys/${surveyId}/responses`}
@@ -336,9 +361,18 @@ export default function SurveyResponsePage() {
                       View Responses ({survey.response_count || 0})
                     </Link>
                   )}
-                  {!isCreator && (
+                  {!isCreator && publicKey && (
+                    <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
+                      <div className="font-medium">Wallet Connected but Not Creator</div>
+                      <div className="text-xs mt-1">
+                        Your wallet: {publicKey.toString()}<br/>
+                        Creator wallet: {survey.creator_wallet}
+                      </div>
+                    </div>
+                  )}
+                  {!isCreator && !publicKey && (
                     <div className="text-sm text-gray-500">
-                      View Responses button only appears for survey creators
+                      Connect your wallet to see if you're the survey creator
                     </div>
                   )}
                 </div>
