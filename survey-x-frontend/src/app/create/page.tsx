@@ -215,7 +215,7 @@ export default function CreateSurveyPage() {
           if (!window.solana.isConnected) {
             console.log('🔗 Phantom not connected, attempting to connect...')
             try {
-              await window.solana.connect()
+              await window.solana?.connect()
               console.log('✅ Phantom connected successfully')
             } catch (error) {
               console.error('❌ Failed to connect to Phantom:', error)
@@ -272,7 +272,7 @@ export default function CreateSurveyPage() {
           if (!window.solana.isConnected) {
             console.log('🔗 Phantom not connected, attempting to connect...')
             try {
-              await window.solana.connect()
+              await window.solana?.connect()
               console.log('✅ Phantom connected successfully')
             } catch (error) {
               console.error('❌ Failed to connect to Phantom:', error)
