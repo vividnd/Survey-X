@@ -49,6 +49,7 @@ export interface SurveyResponse {
   computation_status: 'pending' | 'processing' | 'completed' | 'failed'
   submitted_at: string
   transaction_hash?: string
+  response_data?: any[] // Actual response data for creators to view
 }
 
 export interface UserProfile {
