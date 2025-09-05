@@ -76,7 +76,7 @@ interface QuizResponse {
 
 export default function DashboardPage() {
   const { publicKey, connected } = useWalletSafe()
-  const [activeTab, setActiveTab] = useState<'browse' | 'content' | 'create'>('browse')
+  const [activeTab, setActiveTab] = useState<'browse' | 'content' | 'create' | 'whitelist'>('browse')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
