@@ -245,6 +245,9 @@ export default function CreateSurveyPage() {
           
           try {
             console.log('📝 Signing transaction...')
+            if (!window.solana?.signTransaction) {
+              throw new Error('Phantom wallet signTransaction method not available')
+            }
             const signed = await window.solana.signTransaction(transaction)
             console.log('✅ Transaction signed successfully!')
             return signed
@@ -295,6 +298,9 @@ export default function CreateSurveyPage() {
           }
           
           try {
+            if (!window.solana?.signTransaction) {
+              throw new Error('Phantom wallet signTransaction method not available')
+            }
             const signedTransactions = []
             for (const transaction of transactions) {
               const signed = await window.solana.signTransaction(transaction)
