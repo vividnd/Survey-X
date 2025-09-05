@@ -11,21 +11,6 @@ import { SurveyService } from '@/lib/surveyService'
 import type { Survey, SurveyQuestion } from '@/lib/supabase'
 import { PublicKey } from '@solana/web3.js'
 
-// Phantom wallet interface
-interface PhantomProvider {
-  isPhantom?: boolean
-  isConnected: boolean
-  publicKey: PublicKey | null
-  connect(): Promise<{ publicKey: PublicKey }>
-  signTransaction(transaction: any): Promise<any>
-  signAllTransactions(transactions: any[]): Promise<any[]>
-}
-
-declare global {
-  interface Window {
-    solana?: PhantomProvider
-  }
-}
 
 export default function SurveyResponsePage() {
   const params = useParams()
