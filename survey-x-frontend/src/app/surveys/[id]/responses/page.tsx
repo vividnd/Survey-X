@@ -84,9 +84,17 @@ export default function SurveyResponsesPage() {
       setSurvey(surveyData)
 
       // Check if current user is the creator
+      console.log('🔍 Responses page - Creator check:', {
+        publicKey: publicKey ? publicKey.toString() : 'null',
+        creatorWallet: surveyData.creator_wallet,
+        isCreator: publicKey && surveyData.creator_wallet === publicKey.toString()
+      })
+      
       if (publicKey && surveyData.creator_wallet === publicKey.toString()) {
         setIsCreator(true)
+        console.log('✅ User is authorized to view responses')
       } else {
+        console.log('❌ User is not authorized to view responses')
         setError('You are not authorized to view responses for this survey')
         return
       }
@@ -118,6 +126,13 @@ export default function SurveyResponsesPage() {
       }
 
       setResponses(responsesData || [])
+      
+      console.log('🔍 Responses loaded:', {
+        surveyId,
+        questionsCount: questionsData?.length || 0,
+        responsesCount: responsesData?.length || 0,
+        responses: responsesData
+      })
 
     } catch (err) {
       console.error('Error loading survey data:', err)
@@ -254,9 +269,12 @@ export default function SurveyResponsesPage() {
             <div className="p-8 text-center">
               <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No Responses Yet</h3>
-              <p className="text-gray-600">
+              <p className="text-gray-600 mb-4">
                 Share your survey to start collecting responses. Responses will appear here once submitted.
               </p>
+              <div className="text-sm text-gray-500 bg-gray-100 p-3 rounded">
+                Debug: Survey ID = {surveyId}, Responses found = {responses.length}
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">

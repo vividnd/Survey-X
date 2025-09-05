@@ -314,7 +314,7 @@ export default function HomePage() {
                             title="View responses"
                           >
                             <Users className="w-4 h-4 inline mr-1" />
-                            Responses
+                            Responses ({survey.response_count || 0})
                           </Link>
                           <button
                             onClick={() => deleteSurvey(survey.survey_id)}
