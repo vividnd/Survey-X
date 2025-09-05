@@ -267,7 +267,7 @@ export class SurveyService {
       console.log('🚀 Starting survey creation process...')
       
       // Generate unique survey ID as a PublicKey
-      const surveyId = Keypair.generate().publicKey.toString()
+      let surveyId = Keypair.generate().publicKey.toString()
       console.log('Generated survey ID:', surveyId)
 
       // Check if survey ID already exists (prevent duplicates)
@@ -282,9 +282,11 @@ export class SurveyService {
         
         if (existingSurvey) {
           console.warn('⚠️ Survey ID already exists, generating new one...')
+          // Regenerate survey ID and continue with the same method
           const newSurveyId = Keypair.generate().publicKey.toString()
           console.log('New survey ID:', newSurveyId)
-          return this.createSurvey({ ...surveyData, surveyId: newSurveyId })
+          // Continue with the new ID instead of recursing
+          surveyId = newSurveyId
         }
       } catch (error) {
         // If error is "not found", that's expected - continue
