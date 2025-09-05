@@ -430,7 +430,8 @@ export default function SurveyResponsesPage() {
                           question: question.question_text,
                           questionResponse,
                           response_data: response.response_data,
-                          response_data_length: response.response_data ? response.response_data.length : 'null'
+                          response_data_length: response.response_data ? response.response_data.length : 'null',
+                          response_data_full: JSON.stringify(response.response_data, null, 2)
                         });
                         
                         return (
@@ -439,10 +440,19 @@ export default function SurveyResponsesPage() {
                               {questionResponse ? (
                                 <div className="space-y-1">
                                   <div className="font-medium text-gray-900">
-                                    {questionResponse.answer || questionResponse.value || questionResponse.response || 'No answer'}
+                                    {questionResponse.answer || questionResponse.value || questionResponse.response || questionResponse.text || 'No answer'}
                                   </div>
                                   <div className="text-xs text-gray-500">
                                     Debug: {JSON.stringify(questionResponse)}
+                                  </div>
+                                </div>
+                              ) : response.response_data && response.response_data[index] ? (
+                                <div className="space-y-1">
+                                  <div className="font-medium text-gray-900">
+                                    Raw Data: {JSON.stringify(response.response_data[index])}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    Fallback display for index {index}
                                   </div>
                                 </div>
                               ) : (
@@ -451,7 +461,7 @@ export default function SurveyResponsesPage() {
                                     No Data
                                   </span>
                                   <div className="text-xs text-gray-400">
-                                    Debug: response_data={response.response_data ? 'exists' : 'null'}, index={index}
+                                    Debug: response_data={response.response_data ? 'exists' : 'null'}, index={index}, length={response.response_data ? response.response_data.length : 'null'}
                                   </div>
                                 </div>
                               )}
