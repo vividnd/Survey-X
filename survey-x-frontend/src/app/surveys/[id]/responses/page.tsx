@@ -84,6 +84,7 @@ interface SurveyResponse {
 }
 
 export default function SurveyResponsesPage() {
+  console.log('🔍 SurveyResponsesPage component loaded')
   const params = useParams()
   const router = useRouter()
   const { publicKey, connected } = useWalletSafe()
@@ -177,6 +178,16 @@ export default function SurveyResponsesPage() {
         responsesCount: responsesData?.length || 0,
         responses: responsesData
       })
+      
+      // Additional debugging for response data
+      if (responsesData && responsesData.length > 0) {
+        console.log('🔍 First response data structure:', {
+          firstResponse: responsesData[0],
+          firstResponseData: responsesData[0]?.response_data,
+          firstResponseDataType: typeof responsesData[0]?.response_data,
+          firstResponseDataLength: responsesData[0]?.response_data?.length
+        })
+      }
       
       // Debug: Log each response's response_data
           responsesData?.forEach((response, index) => {
