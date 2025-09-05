@@ -214,7 +214,7 @@ export class SurveyService {
     description: string
     questions: Array<{
       question_text: string
-      question_type: 'multiple_choice' | 'rating' | 'text'
+      question_type: 'multiple_choice' | 'rating' | 'text_input'
       options?: string[]
       required: boolean
     }>

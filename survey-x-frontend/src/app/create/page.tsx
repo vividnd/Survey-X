@@ -186,7 +186,7 @@ export default function CreateSurveyPage() {
         maxResponses: maxResponses || 1000, // Default to 1000 if not specified
         questions: questions.map(q => ({
           question_text: q.question_text.trim(),
-          question_type: (q.question_type === 'text_input' ? 'text' : q.question_type) as 'text' | 'rating' | 'multiple_choice',
+          question_type: q.question_type,
           options: q.question_type === 'multiple_choice' ? q.options.filter(opt => opt.trim()) : undefined,
           required: q.required
         }))
