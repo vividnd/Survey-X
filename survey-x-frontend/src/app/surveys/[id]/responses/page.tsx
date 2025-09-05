@@ -425,25 +425,34 @@ export default function SurveyResponsesPage() {
                           ? response.response_data[index] 
                           : null;
                         
+                        // Debug logging
+                        console.log(`Question ${index} response:`, {
+                          question: question.question_text,
+                          questionResponse,
+                          response_data: response.response_data,
+                          response_data_length: response.response_data ? response.response_data.length : 'null'
+                        });
+                        
                         return (
                           <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <div className="max-w-xs">
                               {questionResponse ? (
                                 <div className="space-y-1">
                                   <div className="font-medium text-gray-900">
-                                    {questionResponse.answer || questionResponse.value || 'No answer'}
+                                    {questionResponse.answer || questionResponse.value || questionResponse.response || 'No answer'}
                                   </div>
-                                  {questionResponse.answer && questionResponse.value && questionResponse.answer !== questionResponse.value && (
-                                    <div className="text-xs text-gray-500">
-                                      Value: {questionResponse.value}
-                                    </div>
-                                  )}
+                                  <div className="text-xs text-gray-500">
+                                    Debug: {JSON.stringify(questionResponse)}
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-2">
                                   <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
                                     No Data
                                   </span>
+                                  <div className="text-xs text-gray-400">
+                                    Debug: response_data={response.response_data ? 'exists' : 'null'}, index={index}
+                                  </div>
                                 </div>
                               )}
                             </div>
