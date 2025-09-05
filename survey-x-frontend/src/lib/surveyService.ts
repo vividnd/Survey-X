@@ -221,7 +221,7 @@ export class SurveyService {
           percentage: attempt.percentage,
           is_passed: attempt.is_passed,
           submitted_at: attempt.created_at,
-          responses: attempt.quiz_responses?.map(response => ({
+          responses: attempt.quiz_responses?.map((response: any) => ({
             question_text: response.question_text,
             // For MCQ quizzes, don't show actual answers - just results
             user_answer: surveyType === 'quiz' ? null : response.user_answer,
@@ -376,7 +376,7 @@ export class SurveyService {
         publicKeyObj = this.wallet.publicKey;
       } else {
         // Handle Solana PublicKey object format
-        publicKeyObj = new PublicKey(this.wallet.publicKey.toString());
+        publicKeyObj = new PublicKey((this.wallet.publicKey as any).toString());
       }
 
       const balance = await this.connection.getBalance(publicKeyObj)
@@ -689,7 +689,7 @@ export class SurveyService {
         console.log(`${i}: ${account.pubkey.toString()} (signer: ${account.isSigner}, writable: ${account.isWritable})`)
 
         // Check if the public key has required properties
-        if (!account.pubkey || !account.pubkey._bn) {
+        if (!account.pubkey || !(account.pubkey instanceof PublicKey)) {
           throw new Error(`Invalid public key at index ${i}: ${account.pubkey}`)
         }
       }
@@ -703,7 +703,7 @@ export class SurveyService {
       console.log('🔍 Pre-signing validation...')
       for (let i = 0; i < transaction.instructions[0].keys.length; i++) {
         const account = transaction.instructions[0].keys[i]
-        if (!account.pubkey || !account.pubkey._bn) {
+        if (!account.pubkey || !(account.pubkey instanceof PublicKey)) {
           console.error(`❌ Account ${i} is invalid:`, account.pubkey)
           throw new Error(`Invalid account at index ${i}: ${account.pubkey}`)
         }
@@ -736,7 +736,7 @@ export class SurveyService {
         console.log('✅ Pre-signing serialization successful, length:', testSerialize.length)
       } catch (serializeError) {
         console.error('❌ Pre-signing serialization failed:', serializeError)
-        throw new Error(`Transaction validation failed: ${serializeError.message}`)
+        throw new Error(`Transaction validation failed: ${serializeError instanceof Error ? serializeError.message : String(serializeError)}`)
       }
 
       // Handle different wallet interface formats
@@ -992,7 +992,7 @@ export class SurveyService {
       for (let i = 0; i < instruction.keys.length; i++) {
         const account = instruction.keys[i]
         console.log(`${i}: ${account.pubkey.toString()} (signer: ${account.isSigner}, writable: ${account.isWritable})`)
-        if (!account.pubkey || !account.pubkey._bn) {
+        if (!account.pubkey || !(account.pubkey instanceof PublicKey)) {
           throw new Error(`Invalid public key at index ${i}: ${account.pubkey}`)
         }
       }
@@ -1090,7 +1090,7 @@ export class SurveyService {
         console.error('❌ Database save failed after successful transaction:', dbError)
         // Transaction succeeded but database failed - this is a rare edge case
         // We could implement retry logic here if needed
-        throw new Error(`Transaction succeeded but database save failed: ${dbError.message}`)
+        throw new Error(`Transaction succeeded but database save failed: ${dbError instanceof Error ? dbError.message : String(dbError)}`)
       }
 
       // Setup computation callback tracking

@@ -206,7 +206,7 @@ export default function QuizResponsesPage() {
               <p className="text-gray-600">No one has taken this quiz yet.</p>
             </div>
           ) : (
-            attempts.map((attempt) => (
+            attempts.map((attempt, index) => (
               <div key={attempt.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 {/* Attempt Header */}
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
@@ -215,13 +215,13 @@ export default function QuizResponsesPage() {
                       <div className="flex items-center gap-2">
                         {getScoreIcon(attempt.percentage)}
                         <span className="font-medium text-gray-900">
-                          Rank #{attempt.rank}
+                          Rank #{index + 1}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-gray-600">
                         <User className="w-4 h-4" />
                         <span className="text-sm font-mono">
-                          {attempt.masked_wallet}
+                          {attempt.participant_wallet.slice(0, 8)}...{attempt.participant_wallet.slice(-8)}
                         </span>
                       </div>
                     </div>

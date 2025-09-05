@@ -143,7 +143,7 @@ export class QuizService {
           .limit(1)
 
         if (quizQuestions && quizQuestions.length > 0) {
-          const creatorWallet = quizQuestions[0].survey_questions?.surveys?.creator_wallet
+          const creatorWallet = (quizQuestions[0] as any).survey_questions?.surveys?.[0]?.creator_wallet
           if (creatorWallet && creatorWallet.length === 44) {
             data.creator_wallet = creatorWallet
             console.log('✅ Found creator wallet from quiz questions:', creatorWallet)

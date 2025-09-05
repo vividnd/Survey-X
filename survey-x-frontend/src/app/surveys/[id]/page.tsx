@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import WalletButtonWrapper from '@/components/WalletButtonWrapper'
 import { useWalletSafe } from '@/hooks/useWalletSafe'
 import { useMobile } from '@/hooks/useMobile'
@@ -19,6 +19,7 @@ export default function SurveyResponsePage() {
   const surveyId = params.id as string
   const { publicKey, connected } = useWalletSafe()
   const isMobile = useMobile()
+  const router = useRouter()
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [questions, setQuestions] = useState<SurveyQuestion[]>([])
   const [responses, setResponses] = useState<Record<number, any>>({})
@@ -80,11 +81,11 @@ export default function SurveyResponsePage() {
       // Use SurveyService instead of direct Supabase query
       const surveyService = new SurveyService({
         publicKey: publicKey,
-        signTransaction: async (tx) => {
+        signTransaction: async (tx: any) => {
           if (!window.solana?.signTransaction) throw new Error('Phantom wallet not found')
           return await window.solana.signTransaction(tx)
         },
-        signAllTransactions: async (txs) => {
+        signAllTransactions: async (txs: any[]) => {
           if (!window.solana?.signAllTransactions) throw new Error('Phantom wallet not found')
           return await window.solana.signAllTransactions(txs)
         }
