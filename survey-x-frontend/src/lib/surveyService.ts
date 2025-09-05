@@ -263,6 +263,10 @@ export class SurveyService {
       throw new Error('Wallet is required for survey creation')
     }
 
+    // Store wallet reference to help TypeScript understand it's defined
+    const wallet = this.wallet
+    const walletPublicKey = wallet.publicKey
+
     try {
       console.log('🚀 Starting survey creation process...')
       
@@ -341,7 +345,7 @@ export class SurveyService {
           .insert({
             title: surveyData.title,
             description: surveyData.description,
-            creator_wallet: this.wallet.publicKey!.toString(),
+            creator_wallet: walletPublicKey.toString(),
             survey_id: surveyId,
             category: surveyData.category,
             hashtags: surveyData.hashtags,
