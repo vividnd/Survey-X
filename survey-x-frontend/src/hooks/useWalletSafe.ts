@@ -124,10 +124,10 @@ export function useWalletSafe() {
       window.addEventListener('wallet-adapter-disconnect', handleWalletConnect)
       
       // Listen for Phantom-specific events if available
-      if (window.solana && typeof window.solana.on === 'function') {
+      if (window.solana && 'on' in window.solana && typeof (window.solana as any).on === 'function') {
         try {
-          window.solana.on('connect', handleWalletConnect)
-          window.solana.on('disconnect', handleWalletConnect)
+          (window.solana as any).on('connect', handleWalletConnect)
+          (window.solana as any).on('disconnect', handleWalletConnect)
         } catch (e) {
           console.log('Could not attach Phantom event listeners:', e)
         }
@@ -148,10 +148,10 @@ export function useWalletSafe() {
         window.removeEventListener('wallet-adapter-disconnect', handleWalletConnect)
         window.removeEventListener('storage', handleWalletConnect)
         
-        if (window.solana && typeof window.solana.removeListener === 'function') {
+        if (window.solana && 'removeListener' in window.solana && typeof (window.solana as any).removeListener === 'function') {
           try {
-            window.solana.removeListener('connect', handleWalletConnect)
-            window.solana.removeListener('disconnect', handleWalletConnect)
+            (window.solana as any).removeListener('connect', handleWalletConnect)
+            (window.solana as any).removeListener('disconnect', handleWalletConnect)
           } catch (e) {
             console.log('Could not remove Phantom event listeners:', e)
           }
