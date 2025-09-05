@@ -288,7 +288,7 @@ export class SurveyService {
           // Continue with the new ID instead of recursing
           surveyId = newSurveyId
         }
-      } catch (error) {
+      } catch (error: any) {
         // If error is "not found", that's expected - continue
         if (!error?.message?.includes('No rows found')) {
           console.warn('Error checking for duplicate survey ID:', error)
