@@ -21,6 +21,43 @@ import {
 // Import Supabase client
 import { supabase } from './supabase'
 
+// Helper function to retry Supabase operations with exponential backoff
+async function retrySupabaseOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: any
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error: any) {
+      lastError = error
+      console.warn(`Supabase operation failed (attempt ${attempt + 1}/${maxRetries}):`, error)
+      
+      // Check if it's a network/SSL error
+      if (error?.message?.includes('SSL') || 
+          error?.message?.includes('network') || 
+          error?.message?.includes('fetch') ||
+          error?.code === 'NETWORK_ERROR') {
+        
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff
+          console.log(`Retrying in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+      }
+      
+      // For non-network errors, don't retry
+      throw error
+    }
+  }
+  
+  throw lastError
+}
+
 // Wallet interface for SurveyService - compatible with Anchor
 interface Wallet {
   publicKey: PublicKey
@@ -233,6 +270,29 @@ export class SurveyService {
       const surveyId = Keypair.generate().publicKey.toString()
       console.log('Generated survey ID:', surveyId)
 
+      // Check if survey ID already exists (prevent duplicates)
+      try {
+        const { data: existingSurvey } = await retrySupabaseOperation(async () => {
+          return await supabase
+            .from('surveys')
+            .select('survey_id')
+            .eq('survey_id', surveyId)
+            .single()
+        })
+        
+        if (existingSurvey) {
+          console.warn('⚠️ Survey ID already exists, generating new one...')
+          const newSurveyId = Keypair.generate().publicKey.toString()
+          console.log('New survey ID:', newSurveyId)
+          return this.createSurvey({ ...surveyData, surveyId: newSurveyId })
+        }
+      } catch (error) {
+        // If error is "not found", that's expected - continue
+        if (!error?.message?.includes('No rows found')) {
+          console.warn('Error checking for duplicate survey ID:', error)
+        }
+      }
+
       // STEP 1: Encrypt survey data for MPC processing
       console.log('🔐 Step 1: Encrypting survey data for Arcium MPC...')
       const surveyJson = JSON.stringify({
@@ -273,23 +333,25 @@ export class SurveyService {
         encrypted_data_length: encryptedSurveyData.length
       })
 
-      const { data: surveyRecord, error: surveyError } = await supabase
-        .from('surveys')
-        .insert({
-          title: surveyData.title,
-          description: surveyData.description,
-          creator_wallet: this.wallet.publicKey.toString(),
-          survey_id: surveyId,
-          category: surveyData.category,
-          hashtags: surveyData.hashtags,
-          is_active: true,
-          question_count: surveyData.questions.length,
-          response_count: 0,
-          max_responses: surveyData.maxResponses,
-          encrypted_data: encryptedSurveyData
-        })
-        .select()
-        .single()
+      const { data: surveyRecord, error: surveyError } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('surveys')
+          .insert({
+            title: surveyData.title,
+            description: surveyData.description,
+            creator_wallet: this.wallet.publicKey.toString(),
+            survey_id: surveyId,
+            category: surveyData.category,
+            hashtags: surveyData.hashtags,
+            is_active: true,
+            question_count: surveyData.questions.length,
+            response_count: 0,
+            max_responses: surveyData.maxResponses,
+            encrypted_data: encryptedSurveyData
+          })
+          .select()
+          .single()
+      })
 
       console.log('Supabase survey insert result:', { data: surveyRecord, error: surveyError })
 
@@ -311,9 +373,11 @@ export class SurveyService {
 
       console.log('Questions to insert:', questionsToInsert)
 
-      const { error: questionsError } = await supabase
-        .from('survey_questions')
-        .insert(questionsToInsert)
+      const { error: questionsError } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('survey_questions')
+          .insert(questionsToInsert)
+      })
 
       console.log('Questions insert result:', { error: questionsError })
 
@@ -711,7 +775,9 @@ export class SurveyService {
         query = query.limit(filters.limit)
       }
 
-      const { data, error } = await query
+      const { data, error } = await retrySupabaseOperation(async () => {
+        return await query
+      })
 
       if (error) {
         console.error('❌ Error fetching surveys:', error)
@@ -727,21 +793,23 @@ export class SurveyService {
 
   async getSurvey(surveyId: string): Promise<any> {
     try {
-      const { data, error } = await supabase
-        .from('surveys')
-        .select(`
-          *,
-          survey_questions (
-            question_id,
-            question_text,
-            question_type,
-            options,
-            required,
-            order_index
-          )
-        `)
-        .eq('survey_id', surveyId)
-        .single()
+      const { data, error } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('surveys')
+          .select(`
+            *,
+            survey_questions (
+              question_id,
+              question_text,
+              question_type,
+              options,
+              required,
+              order_index
+            )
+          `)
+          .eq('survey_id', surveyId)
+          .single()
+      })
 
       if (error) {
         console.error('❌ Error fetching survey:', error)

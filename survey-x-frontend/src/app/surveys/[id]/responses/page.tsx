@@ -8,6 +8,43 @@ import { supabase } from '@/lib/supabase'
 import { useWalletSafe } from '@/hooks/useWalletSafe'
 import WalletButtonWrapper from '@/components/WalletButtonWrapper'
 
+// Helper function to retry Supabase operations with exponential backoff
+async function retrySupabaseOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: any
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error: any) {
+      lastError = error
+      console.warn(`Supabase operation failed (attempt ${attempt + 1}/${maxRetries}):`, error)
+      
+      // Check if it's a network/SSL error
+      if (error?.message?.includes('SSL') || 
+          error?.message?.includes('network') || 
+          error?.message?.includes('fetch') ||
+          error?.code === 'NETWORK_ERROR') {
+        
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelay * Math.pow(2, attempt) // Exponential backoff
+          console.log(`Retrying in ${delay}ms...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
+        }
+      }
+      
+      // For non-network errors, don't retry
+      throw error
+    }
+  }
+  
+  throw lastError
+}
+
 interface Survey {
   id: string
   title: string
@@ -70,11 +107,13 @@ export default function SurveyResponsesPage() {
       setError('')
 
       // Load survey data
-      const { data: surveyData, error: surveyError } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .single()
+      const { data: surveyData, error: surveyError } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('surveys')
+          .select('*')
+          .eq('survey_id', surveyId)
+          .single()
+      })
 
       if (surveyError || !surveyData) {
         setError('Survey not found')
@@ -100,11 +139,13 @@ export default function SurveyResponsesPage() {
       }
 
       // Load questions
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('survey_questions')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .order('order_index')
+      const { data: questionsData, error: questionsError } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('survey_questions')
+          .select('*')
+          .eq('survey_id', surveyId)
+          .order('order_index')
+      })
 
       if (questionsError) {
         setError('Failed to load survey questions')
@@ -114,11 +155,13 @@ export default function SurveyResponsesPage() {
       setQuestions(questionsData || [])
 
       // Load responses
-      const { data: responsesData, error: responsesError } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .order('submitted_at', { ascending: false })
+      const { data: responsesData, error: responsesError } = await retrySupabaseOperation(async () => {
+        return await supabase
+          .from('survey_responses')
+          .select('*')
+          .eq('survey_id', surveyId)
+          .order('submitted_at', { ascending: false })
+      })
 
       if (responsesError) {
         setError('Failed to load survey responses')
