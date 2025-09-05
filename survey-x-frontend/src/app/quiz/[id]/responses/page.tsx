@@ -74,7 +74,7 @@ export default function QuizResponsesPage() {
 
         // Load responses for each attempt
         const responsesData: {[attemptId: string]: QuizResponse[]} = {}
-        for (const attempt of allAttempts) {
+        for (const attempt of allResponses) {
           try {
             const attemptResponses = await QuizService.getQuizResponses(attempt.id)
             responsesData[attempt.id] = attemptResponses
