@@ -101,7 +101,7 @@ export default function QuizPage() {
         } else {
           const quizCreatorWallet = quizData.creator_wallet
           const isUserCreator = quizCreatorWallet && quizCreatorWallet.length === 44 && quizCreatorWallet === stablePublicKey
-          setIsCreator(isUserCreator)
+          setIsCreator(Boolean(isUserCreator))
 
           console.log('🔍 Final quiz creator check:', {
             isCreator: isUserCreator,
