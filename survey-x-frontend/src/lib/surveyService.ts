@@ -259,7 +259,7 @@ export class SurveyService {
     hashtags: string[]
     maxResponses: number
   }): Promise<{ surveyId: string, transactionSignature: string, note: string }> {
-    if (!this.wallet) {
+    if (!this.wallet || !this.wallet.publicKey) {
       throw new Error('Wallet is required for survey creation')
     }
 
