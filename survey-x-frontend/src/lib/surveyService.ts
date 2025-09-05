@@ -287,10 +287,8 @@ export class SurveyService {
         if (existingSurvey) {
           console.warn('⚠️ Survey ID already exists, generating new one...')
           // Regenerate survey ID and continue with the same method
-          const newSurveyId = Keypair.generate().publicKey.toString()
-          console.log('New survey ID:', newSurveyId)
-          // Continue with the new ID instead of recursing
-          surveyId = newSurveyId
+          surveyId = Keypair.generate().publicKey.toString()
+          console.log('New survey ID:', surveyId)
         }
       } catch (error: any) {
         // If error is "not found", that's expected - continue

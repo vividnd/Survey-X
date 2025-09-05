@@ -355,6 +355,33 @@ export default function SurveyResponsesPage() {
                 : `${responses.length} response${responses.length === 1 ? '' : 's'} received`
               }
             </p>
+            {responses.length > 0 && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-blue-800">
+                      Response Data Status
+                    </h3>
+                    <div className="mt-1 text-sm text-blue-700">
+                      <p>
+                        • <strong>Green responses:</strong> Full data available (submitted after recent update)
+                      </p>
+                      <p>
+                        • <strong>Orange "Legacy Response":</strong> Data not available (submitted before update)
+                      </p>
+                      <p>
+                        • All responses are encrypted and stored securely on the blockchain
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {responses.length === 0 ? (
@@ -468,7 +495,7 @@ export default function SurveyResponsesPage() {
                                     {questionResponse.answer || questionResponse.value || questionResponse.response || questionResponse.text || 'No answer'}
                                   </div>
                                   <div className="text-xs text-gray-500">
-                                    Debug: {JSON.stringify(questionResponse)}
+                                    Type: {question.question_type}
                                   </div>
                                 </div>
                               ) : response.response_data && response.response_data[index] ? (
@@ -480,13 +507,22 @@ export default function SurveyResponsesPage() {
                                     Fallback display for index {index}
                                   </div>
                                 </div>
+                              ) : response.response_data === null ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-1 bg-orange-100 text-orange-600 text-xs rounded-full">
+                                    Legacy Response
+                                  </span>
+                                  <div className="text-xs text-orange-500">
+                                    Data not available (submitted before update)
+                                  </div>
+                                </div>
                               ) : (
                                 <div className="flex items-center gap-2">
                                   <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
                                     No Data
                                   </span>
                                   <div className="text-xs text-gray-400">
-                                    Debug: response_data={response.response_data ? 'exists' : 'null'}, index={index}, length={response.response_data ? response.response_data.length : 'null'}
+                                    Index {index} not found
                                   </div>
                                 </div>
                               )}
