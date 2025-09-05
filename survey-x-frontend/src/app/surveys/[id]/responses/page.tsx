@@ -80,6 +80,7 @@ interface SurveyResponse {
   computation_status: string
   submitted_at: string
   transaction_hash?: string
+  response_data?: any[] // Actual response data for creators to view
 }
 
 export default function SurveyResponsesPage() {
