@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import WalletButtonWrapper from '@/components/WalletButtonWrapper'
 import { useWalletSafe } from '@/hooks/useWalletSafe'
-import { ArrowLeft, Send, CheckCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, AlertCircle, Users } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { SurveyService } from '@/lib/surveyService'
@@ -24,6 +24,7 @@ export default function SurveyResponsePage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [hasResponded, setHasResponded] = useState(false)
+  const [isCreator, setIsCreator] = useState(false)
 
   useEffect(() => {
     if (surveyId) {
@@ -67,6 +68,22 @@ export default function SurveyResponsePage() {
 
       setSurvey(surveyData)
       setQuestions(questionsData || [])
+      
+      // Check if current user is the creator
+      if (publicKey && surveyData.creator_wallet === publicKey.toString()) {
+        setIsCreator(true)
+      }
+      
+      // Debug: Log questions to see their types
+      console.log('🔍 Loaded questions:', questionsData)
+      questionsData?.forEach((q, index) => {
+        console.log(`Question ${index + 1}:`, {
+          id: q.question_id,
+          text: q.question_text,
+          type: q.question_type,
+          options: q.options
+        })
+      })
     } catch (err) {
       console.error('Error loading survey:', err)
       setError('Failed to load survey')
@@ -296,6 +313,19 @@ export default function SurveyResponsePage() {
                     ))}
                   </div>
                 )}
+
+                {/* Creator Actions */}
+                {isCreator && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <Link
+                      href={`/surveys/${surveyId}/responses`}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      View Responses ({survey.response_count || 0})
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -401,15 +431,23 @@ export default function SurveyResponsePage() {
                 )}
 
                 {question.question_type === 'text_input' && (
-                  <textarea
-                    value={responses[question.question_id] || ''}
-                    onChange={(e) => handleResponseChange(question.question_id, e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 placeholder-gray-500 bg-white"
-                    placeholder="Enter your response..."
-                    required={question.required}
-                  />
+                  <div>
+                    <p className="text-sm text-gray-500 mb-2">Debug: Text input question detected</p>
+                    <textarea
+                      value={responses[question.question_id] || ''}
+                      onChange={(e) => handleResponseChange(question.question_id, e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 placeholder-gray-500 bg-white"
+                      placeholder="Enter your response..."
+                      required={question.required}
+                    />
+                  </div>
                 )}
+
+                {/* Debug: Show question type for all questions */}
+                <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
+                  Debug: Question type = "{question.question_type}"
+                </div>
               </div>
             ))}
 
