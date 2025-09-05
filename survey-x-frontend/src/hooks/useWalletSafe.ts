@@ -32,21 +32,25 @@ export function useWalletSafe() {
     // Check for wallet connection state from browser storage/localStorage
     const checkWalletState = () => {
       try {
-        // Check if Phantom wallet is connected
-        if (typeof window !== 'undefined' && window.solana?.isPhantom) {
-          const isConnected = window.solana.isConnected
-          const publicKey = window.solana.publicKey
-          
-          // Only log when state changes
-          if (isConnected && publicKey) {
-            console.log('✅ Phantom wallet connected:', publicKey.toString())
-            setWalletState(prev => ({
-              ...prev,
-              connected: true,
-              publicKey: publicKey,
-              wallet: window.solana
-            }))
-            return
+        // Check if Phantom wallet is connected (with error handling)
+        if (typeof window !== 'undefined' && window.solana) {
+          try {
+            const isConnected = window.solana.isConnected
+            const publicKey = window.solana.publicKey
+            
+            if (isConnected && publicKey) {
+              console.log('✅ Solana wallet connected:', publicKey.toString())
+              setWalletState(prev => ({
+                ...prev,
+                connected: true,
+                publicKey: publicKey,
+                wallet: window.solana
+              }))
+              return
+            }
+          } catch (e) {
+            console.log('Error checking Solana wallet:', e)
+            // Continue to other detection methods
           }
         }
         
@@ -106,20 +110,52 @@ export function useWalletSafe() {
     // Check immediately
     checkWalletState()
     
-    // Listen for wallet connection events (no interval needed)
+    // Also check after a delay to catch late-loading extensions
+    const delayedCheck = setTimeout(checkWalletState, 1000)
+    
+    // Listen for wallet connection events
     const handleWalletConnect = () => {
-      setTimeout(checkWalletState, 100)
+      setTimeout(checkWalletState, 200) // Longer delay to let extensions settle
     }
     
     if (typeof window !== 'undefined') {
+      // Listen for wallet adapter events
       window.addEventListener('wallet-adapter-connect', handleWalletConnect)
       window.addEventListener('wallet-adapter-disconnect', handleWalletConnect)
+      
+      // Listen for Phantom-specific events if available
+      if (window.solana && typeof window.solana.on === 'function') {
+        try {
+          window.solana.on('connect', handleWalletConnect)
+          window.solana.on('disconnect', handleWalletConnect)
+        } catch (e) {
+          console.log('Could not attach Phantom event listeners:', e)
+        }
+      }
+      
+      // Listen for storage changes
+      window.addEventListener('storage', (e) => {
+        if (e.key && (e.key.includes('wallet') || e.key.includes('phantom'))) {
+          handleWalletConnect()
+        }
+      })
     }
 
     return () => {
+      clearTimeout(delayedCheck)
       if (typeof window !== 'undefined') {
         window.removeEventListener('wallet-adapter-connect', handleWalletConnect)
         window.removeEventListener('wallet-adapter-disconnect', handleWalletConnect)
+        window.removeEventListener('storage', handleWalletConnect)
+        
+        if (window.solana && typeof window.solana.removeListener === 'function') {
+          try {
+            window.solana.removeListener('connect', handleWalletConnect)
+            window.solana.removeListener('disconnect', handleWalletConnect)
+          } catch (e) {
+            console.log('Could not remove Phantom event listeners:', e)
+          }
+        }
       }
     }
   }, [])

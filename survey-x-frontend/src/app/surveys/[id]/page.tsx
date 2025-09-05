@@ -371,8 +371,27 @@ export default function SurveyResponsePage() {
                     </div>
                   )}
                   {!isCreator && !publicKey && (
-                    <div className="text-sm text-gray-500">
-                      Connect your wallet to see if you're the survey creator
+                    <div className="space-y-3">
+                      <div className="text-sm text-gray-500">
+                        Connect your wallet to see if you're the survey creator
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            if (window.solana && window.solana.connect) {
+                              await window.solana.connect()
+                            } else {
+                              alert('Please install Phantom wallet or another Solana wallet extension')
+                            }
+                          } catch (error) {
+                            console.error('Wallet connection error:', error)
+                            alert('Failed to connect wallet. Please try refreshing the page.')
+                          }
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        Connect Wallet
+                      </button>
                     </div>
                   )}
                 </div>
