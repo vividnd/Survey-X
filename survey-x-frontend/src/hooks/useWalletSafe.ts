@@ -4,7 +4,17 @@ import { useState, useEffect } from 'react'
 
 export function useWalletSafe() {
   const [mounted, setMounted] = useState(false)
-  const [walletState, setWalletState] = useState({
+  const [walletState, setWalletState] = useState<{
+    publicKey: any | null
+    connected: boolean
+    connecting: boolean
+    disconnecting: boolean
+    wallet: any | null
+    wallets: any[]
+    select: () => void
+    connect: () => Promise<void>
+    disconnect: () => Promise<void>
+  }>({
     publicKey: null,
     connected: false,
     connecting: false,
