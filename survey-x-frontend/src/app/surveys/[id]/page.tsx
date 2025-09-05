@@ -156,6 +156,9 @@ export default function SurveyResponsePage() {
           if (!window.solana) {
             throw new Error('Phantom wallet not found')
           }
+          if (!window.solana.signTransaction) {
+            throw new Error('Phantom wallet signTransaction method not available')
+          }
 
           const signed = await window.solana.signTransaction(transaction)
           return signed
@@ -163,6 +166,9 @@ export default function SurveyResponsePage() {
         signAllTransactions: async (transactions: any[]) => {
           if (!window.solana) {
             throw new Error('Phantom wallet not found')
+          }
+          if (!window.solana.signTransaction) {
+            throw new Error('Phantom wallet signTransaction method not available')
           }
           
           const signedTransactions = []
