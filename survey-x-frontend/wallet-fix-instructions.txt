@@ -1,0 +1,10 @@
+-- Quick manual approach to disable conflicting extensions:
+-- Go to chrome://extensions/ and disable:
+-- - MetaMask
+-- - Zerion
+-- - Razor Wallet  
+-- - Nightly
+-- - Backpack
+-- - Any other Ethereum/Solana wallets EXCEPT Phantom
+--
+-- Keep only Phantom enabled for Solana

@@ -7,6 +7,8 @@ import { ArrowLeft, Users, Eye, Download, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useWalletSafe } from '@/hooks/useWalletSafe'
 import WalletButtonWrapper from '@/components/WalletButtonWrapper'
+import QuestionTypeBadge from '@/components/QuestionTypeBadge'
+import ResponseAnalytics from '@/components/ResponseAnalytics'
 
 // Helper function to retry Supabase operations with exponential backoff
 async function retrySupabaseOperation<T>(
@@ -84,11 +86,12 @@ interface SurveyResponse {
 }
 
 export default function SurveyResponsesPage() {
-  console.log('🔍 SurveyResponsesPage component loaded')
   const params = useParams()
   const router = useRouter()
   const { publicKey, connected } = useWalletSafe()
   const surveyId = params.id as string
+
+  console.log('🔍 SurveyResponsesPage component loaded')
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -103,40 +106,132 @@ export default function SurveyResponsesPage() {
     }
   }, [surveyId, publicKey])
 
+  // Additional effect to handle wallet connection timing
+  useEffect(() => {
+    if (publicKey && survey && !isCreator && !error.includes('not authorized')) {
+      loadSurveyData()
+    }
+  }, [publicKey, survey?.survey_id, isCreator, error])
+
+  // Retry mechanism for wallet connection
+  useEffect(() => {
+    if (connected && publicKey && !survey && !loading && !error) {
+      console.log('🔄 Retrying survey responses load with wallet:', publicKey.toString())
+      loadSurveyData()
+    }
+  }, [connected, publicKey, survey, loading, error])
+
+  // Additional retry for when wallet becomes available
+  useEffect(() => {
+    if (publicKey && publicKey.toString() !== 'null' && !survey && !loading) {
+      console.log('🔄 Wallet available, retrying load:', publicKey.toString())
+      loadSurveyData()
+    }
+  }, [publicKey])
+
   const loadSurveyData = async () => {
     try {
       setLoading(true)
       setError('')
 
-      // Load survey data
-      const { data: surveyData, error: surveyError } = await retrySupabaseOperation(async () => {
-        return await supabase
-          .from('surveys')
-          .select('*')
-          .eq('survey_id', surveyId)
-          .single()
-      })
+      console.log('🔍 Loading survey data for ID:', surveyId)
+      console.log('🔍 Current wallet state:', { connected, publicKey: publicKey?.toString() })
 
-      if (surveyError || !surveyData) {
-        setError('Survey not found')
+      // Load survey data with enhanced error handling
+      let surveyData, surveyError
+      try {
+        console.log('🔍 Making Supabase query for survey...')
+        const result = await retrySupabaseOperation(async () => {
+          return await supabase
+            .from('surveys')
+            .select('*')
+            .eq('survey_id', surveyId)
+            .single()
+        })
+        surveyData = result.data
+        surveyError = result.error
+        console.log('🔍 Supabase query result:', { data: surveyData, error: surveyError })
+      } catch (networkError) {
+        console.error('🚨 Network error loading survey:', networkError)
+        setError('Network error: Unable to load survey. Please check your connection and try again.')
         return
       }
 
+      if (surveyError || !surveyData) {
+        console.error('🚨 Survey not found:', {
+          surveyError,
+          surveyData,
+          surveyId,
+          errorCode: surveyError?.code,
+          errorMessage: surveyError?.message,
+          errorDetails: surveyError?.details
+        })
+        setError(`Survey not found. ID: ${surveyId}. Error: ${surveyError?.message || 'Unknown error'}`)
+        return
+      }
+
+      console.log('✅ Survey loaded successfully:', {
+        surveyId: surveyData.survey_id,
+        title: surveyData.title,
+        creator: surveyData.creator_wallet,
+        isActive: surveyData.is_active
+      })
+
       setSurvey(surveyData)
 
-      // Check if current user is the creator
-      console.log('🔍 Responses page - Creator check:', {
-        publicKey: publicKey ? publicKey.toString() : 'null',
-        creatorWallet: surveyData.creator_wallet,
-        isCreator: publicKey && surveyData.creator_wallet === publicKey.toString()
+      // Check if current user is the creator with stable wallet state
+      console.log('🔍 Preparing creator check...', {
+        currentPublicKey: publicKey?.toString(),
+        connected,
+        surveyCreator: surveyData.creator_wallet
       })
-      
-      if (publicKey && surveyData.creator_wallet === publicKey.toString()) {
+
+      // Wait a moment for wallet state to stabilize
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Double-check wallet state after delay
+      const stablePublicKey = publicKey?.toString()
+      const stableConnected = connected
+
+      console.log('🔍 Stable wallet check:', {
+        stablePublicKey,
+        stableConnected,
+        surveyCreator: surveyData.creator_wallet
+      })
+
+      if (!stablePublicKey || !stableConnected) {
+        console.log('🔍 Responses page - No stable public key available')
+        setError('Please connect your wallet to view responses')
+        return
+      }
+
+      console.log('🔍 Responses page - Creator check:', {
+        publicKey: stablePublicKey,
+        creatorWallet: surveyData.creator_wallet,
+        walletMatch: surveyData.creator_wallet === stablePublicKey,
+        surveyData: {
+          id: surveyData.id,
+          survey_id: surveyData.survey_id,
+          title: surveyData.title,
+          creator_wallet: surveyData.creator_wallet
+        }
+      })
+
+      if (surveyData.creator_wallet === stablePublicKey) {
         setIsCreator(true)
         console.log('✅ User is authorized to view responses')
       } else {
         console.log('❌ User is not authorized to view responses')
-        setError('You are not authorized to view responses for this survey')
+        console.log('🔍 Authorization failure details:', {
+          expectedCreator: surveyData.creator_wallet,
+          actualUser: stablePublicKey,
+          surveyInfo: {
+            id: surveyData.id,
+            survey_id: surveyData.survey_id,
+            title: surveyData.title
+          }
+        })
+        setError(`You are not authorized to view responses for this survey. Expected creator: ${surveyData.creator_wallet}, Your wallet: ${stablePublicKey}`)
         return
       }
 
@@ -173,37 +268,23 @@ export default function SurveyResponsesPage() {
       setResponses(responsesData || [])
       
       console.log('🔍 Responses loaded:', {
-        surveyId,
+        surveyId: surveyId,
         questionsCount: questionsData?.length || 0,
         responsesCount: responsesData?.length || 0,
-        responses: responsesData
+        responses: responsesData || []
       })
       
-      // Additional debugging for response data
       if (responsesData && responsesData.length > 0) {
         console.log('🔍 First response data structure:', {
           firstResponse: responsesData[0],
-          firstResponseData: responsesData[0]?.response_data,
-          firstResponseDataType: typeof responsesData[0]?.response_data,
-          firstResponseDataLength: responsesData[0]?.response_data?.length,
-          firstResponseDataContent: JSON.stringify(responsesData[0]?.response_data, null, 2),
-          firstResponseDataIndex0: responsesData[0]?.response_data?.[0],
-          firstResponseDataIndex0Stringified: JSON.stringify(responsesData[0]?.response_data?.[0], null, 2)
+          firstResponseData: responsesData[0].response_data,
+          firstResponseDataType: typeof responsesData[0].response_data,
+          firstResponseDataLength: responsesData[0].response_data?.length,
+          firstResponseDataContent: JSON.stringify(responsesData[0].response_data, null, 2)
         })
       }
       
-      // Debug: Log each response's response_data
-          responsesData?.forEach((response, index) => {
-      console.log(`Response ${index + 1}:`, {
-        id: response.id,
-        response_id: response.response_id,
-        responder_wallet: response.responder_wallet,
-        response_data: response.response_data,
-        response_data_type: typeof response.response_data,
-        response_data_length: response.response_data ? response.response_data.length : 'null',
-        full_response_object: response // Log the entire response object for debugging
-      })
-    })
+      // Responses loaded successfully
 
     } catch (err) {
       console.error('Error loading survey data:', err)
@@ -218,16 +299,18 @@ export default function SurveyResponsesPage() {
 
     const csvData = [
       // Header row
-      ['Responder Wallet', 'Submitted At', 'Status', 'Transaction Hash', ...questions.map(q => q.question_text)],
+      ['Response #', 'Submitted At', ...questions.map(q => q.question_text)],
       // Data rows
-      ...responses.map(response => [
-        response.responder_wallet,
+      ...responses.map((response, index) => [
+        `#${index + 1}`,
         new Date(response.submitted_at).toLocaleString(),
-        response.computation_status,
-        response.transaction_hash || 'N/A',
-        // Note: Actual response data is encrypted and stored on-chain
-        // This would need to be decrypted using Arcium MPC
-        ...questions.map(() => '[Encrypted - Requires MPC Decryption]')
+        // Display actual response data
+        ...questions.map((question, qIndex) => {
+          const questionResponse = response.response_data && response.response_data[qIndex] 
+            ? response.response_data[qIndex] 
+            : null;
+          return questionResponse ? (questionResponse.answer || questionResponse.value || questionResponse.response || questionResponse.text || 'No answer') : 'No data';
+        })
       ])
     ]
 
@@ -256,9 +339,51 @@ export default function SurveyResponsesPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Error</h1>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Link href="/" className="text-blue-600 hover:text-blue-700">
-            ← Back to Home
-          </Link>
+          
+          {/* Show Back to Home button for authorization errors */}
+          {error.includes('not authorized') && (
+            <div className="mb-4">
+              <Link
+                href="/"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Home
+              </Link>
+            </div>
+          )}
+
+          {/* Show Connect Wallet button if error is about wallet connection */}
+          {error.includes('connect your wallet') && (
+            <div className="mb-4">
+              <button
+                onClick={async () => {
+                  try {
+                    if (window.solana && window.solana.connect) {
+                      await window.solana.connect()
+                    } else {
+                      alert('Please install Phantom wallet or another Solana wallet extension')
+                    }
+                  } catch (error) {
+                    console.error('Wallet connection error:', error)
+                    alert('Failed to connect wallet. Please try refreshing the page.')
+                  }
+                }}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Connect Wallet
+              </button>
+            </div>
+          )}
+          
+          <div className="space-y-2">
+            <Link href="/" className="block text-blue-600 hover:text-blue-700">
+              ← Back to Home
+            </Link>
+            <Link href="/my-content" className="block text-green-600 hover:text-green-700">
+              📊 My Content
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -345,6 +470,23 @@ export default function SurveyResponsesPage() {
           </div>
         </div>
 
+        {/* Analytics Dashboard */}
+        {responses.length > 0 && (
+          <ResponseAnalytics 
+            questions={questions.map(q => ({
+              id: q.question_id,
+              question_text: q.question_text,
+              question_type: q.question_type,
+              options: q.options
+            }))} 
+            responses={responses.map(r => ({
+              id: r.id,
+              response_data: r.response_data || null,
+              submitted_at: r.submitted_at
+            }))} 
+          />
+        )}
+
         {/* Responses Table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
@@ -397,77 +539,35 @@ export default function SurveyResponsesPage() {
             </div>
           ) : (
             (() => {
-              console.log('🔍 TABLE RENDERING: About to render table with', responses.length, 'responses')
               return (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Responder
+                      Response #
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Submitted
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Transaction
                     </th>
                     {questions.map((question, index) => (
                       <th key={index} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {question.question_text}
                       </th>
                     ))}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {responses.map((response, responseIndex) => {
-                    console.log(`🔍 Rendering response ${responseIndex + 1}:`, {
-                      responseId: response.response_id,
-                      responseData: response.response_data,
-                      responseDataLength: response.response_data ? response.response_data.length : 'null'
-                    });
                     return (
                     <tr key={response.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {response.responder_wallet.substring(0, 8)}...{response.responder_wallet.substring(-8)}
+                          #{responseIndex + 1}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(response.submitted_at).toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          response.computation_status === 'completed' 
-                            ? 'bg-green-100 text-green-800'
-                            : response.computation_status === 'processing'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : response.computation_status === 'failed'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {response.computation_status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {response.transaction_hash ? (
-                          <a
-                            href={`https://explorer.solana.com/tx/${response.transaction_hash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            {response.transaction_hash.substring(0, 8)}...
-                          </a>
-                        ) : (
-                          'N/A'
-                        )}
                       </td>
                       {questions.map((question, index) => {
                         // Get the response for this question
@@ -476,15 +576,6 @@ export default function SurveyResponsesPage() {
                           : null;
                         
                         // Debug logging - Enhanced
-                        console.log(`🔍 Question ${index} response:`, {
-                          question: question.question_text,
-                          questionResponse,
-                          response_data: response.response_data,
-                          response_data_length: response.response_data ? response.response_data.length : 'null',
-                          response_data_full: JSON.stringify(response.response_data, null, 2),
-                          response_data_index_0: response.response_data ? response.response_data[0] : 'null',
-                          response_data_index_1: response.response_data ? response.response_data[1] : 'null'
-                        });
                         
                         return (
                           <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -494,8 +585,8 @@ export default function SurveyResponsesPage() {
                                   <div className="font-medium text-gray-900">
                                     {questionResponse.answer || questionResponse.value || questionResponse.response || questionResponse.text || 'No answer'}
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    Type: {question.question_type}
+                                  <div className="mt-2">
+                                    <QuestionTypeBadge questionType={question.question_type} />
                                   </div>
                                 </div>
                               ) : response.response_data && response.response_data[index] ? (
@@ -508,20 +599,20 @@ export default function SurveyResponsesPage() {
                                   </div>
                                 </div>
                               ) : response.response_data === null ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-1 bg-orange-100 text-orange-600 text-xs rounded-full">
-                                    Legacy Response
+                                <div className="space-y-1">
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    ⚠️ Legacy Response
                                   </span>
-                                  <div className="text-xs text-orange-500">
+                                  <div className="text-xs text-orange-600">
                                     Data not available (submitted before update)
                                   </div>
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-2">
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                                    No Data
+                                <div className="space-y-1">
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    ❌ No Data
                                   </span>
-                                  <div className="text-xs text-gray-400">
+                                  <div className="text-xs text-gray-500">
                                     Index {index} not found
                                   </div>
                                 </div>
@@ -530,17 +621,6 @@ export default function SurveyResponsesPage() {
                           </td>
                         );
                       })}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <button
-                          className="text-blue-600 hover:text-blue-700"
-                          onClick={() => {
-                            // TODO: Implement response decryption and viewing
-                            alert('Response decryption feature coming soon!')
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
                     </tr>
                     );
                   })}
@@ -563,8 +643,8 @@ export default function SurveyResponsesPage() {
               <div className="mt-2 text-sm text-blue-700">
                 <p>
                   Survey responses are encrypted using Arcium MPC technology for maximum privacy. 
-                  Individual response data requires MPC decryption to view. Only aggregated statistics 
-                  and metadata are visible here.
+                  As the survey creator, you can view the decrypted response data below. 
+                  Responder identities are protected and not displayed.
                 </p>
               </div>
             </div>

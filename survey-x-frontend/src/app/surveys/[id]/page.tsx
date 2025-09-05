@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import WalletButtonWrapper from '@/components/WalletButtonWrapper'
 import { useWalletSafe } from '@/hooks/useWalletSafe'
-import { ArrowLeft, Send, CheckCircle, AlertCircle, Users } from 'lucide-react'
+import { useMobile } from '@/hooks/useMobile'
+import { ArrowLeft, Send, CheckCircle, AlertCircle, Users, Lock, Award } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { SurveyService } from '@/lib/surveyService'
+import { QuizService } from '@/lib/quizService'
 import type { Survey, SurveyQuestion } from '@/lib/supabase'
 import { PublicKey } from '@solana/web3.js'
 
@@ -16,6 +18,7 @@ export default function SurveyResponsePage() {
   const params = useParams()
   const surveyId = params.id as string
   const { publicKey, connected } = useWalletSafe()
+  const isMobile = useMobile()
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [questions, setQuestions] = useState<SurveyQuestion[]>([])
   const [responses, setResponses] = useState<Record<number, any>>({})
@@ -25,6 +28,11 @@ export default function SurveyResponsePage() {
   const [success, setSuccess] = useState('')
   const [hasResponded, setHasResponded] = useState(false)
   const [isCreator, setIsCreator] = useState(false)
+  const [isQuiz, setIsQuiz] = useState(false)
+  const [quizData, setQuizData] = useState<any>(null)
+  const [isSpecialSurvey, setIsSpecialSurvey] = useState(false)
+  const [whitelistStatus, setWhitelistStatus] = useState<any>(null)
+  const [requiredQuizId, setRequiredQuizId] = useState<string | null>(null)
 
   useEffect(() => {
     if (surveyId) {
@@ -39,81 +47,113 @@ export default function SurveyResponsePage() {
     }
   }, [surveyId, publicKey])
 
-  // Re-check creator status when wallet connection changes
+  // Re-check creator status and whitelist status when wallet connection changes
   useEffect(() => {
     if (survey && publicKey) {
-      console.log('🔍 Re-checking creator status:', {
-        publicKey: publicKey.toString(),
-        creatorWallet: survey.creator_wallet,
-        isCreator: survey.creator_wallet === publicKey.toString()
-      })
-      
-      if (survey.creator_wallet === publicKey.toString()) {
+      const userWallet = publicKey.toString()
+      const creatorWallet = survey.creator_wallet
+
+      // Only consider creator if wallet is full length (44 chars for Solana)
+      if (creatorWallet && creatorWallet.length === 44 && creatorWallet === userWallet) {
         setIsCreator(true)
-        console.log('✅ User is the survey creator (re-check)')
       } else {
         setIsCreator(false)
-        console.log('❌ User is not the survey creator (re-check)')
       }
-    } else if (survey && !publicKey) {
+      
+      // Re-check whitelist status for special surveys
+      if (isSpecialSurvey && requiredQuizId) {
+        QuizService.getWhitelistStatus(publicKey.toString(), requiredQuizId)
+          .then(setWhitelistStatus)
+          .catch(console.error)
+      }
+    } else if (survey && !publicKey && !isQuiz) {
       setIsCreator(false)
-      console.log('❌ No wallet connected, not creator')
+      setWhitelistStatus(null)
+      // No wallet connected
     }
-  }, [survey, publicKey])
+  }, [survey, publicKey, isQuiz, isSpecialSurvey, requiredQuizId])
 
   const [isSurveyFull, setIsSurveyFull] = useState(false)
 
   const loadSurvey = async () => {
     try {
-      const { data: surveyData, error: surveyError } = await supabase
-        .from('surveys')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .eq('is_active', true)
-        .single()
+      // Use SurveyService instead of direct Supabase query
+      const surveyService = new SurveyService({
+        publicKey: publicKey,
+        signTransaction: async (tx) => {
+          if (!window.solana?.signTransaction) throw new Error('Phantom wallet not found')
+          return await window.solana.signTransaction(tx)
+        },
+        signAllTransactions: async (txs) => {
+          if (!window.solana?.signAllTransactions) throw new Error('Phantom wallet not found')
+          return await window.solana.signAllTransactions(txs)
+        }
+      })
 
-      if (surveyError || !surveyData) {
+      let surveyData = await surveyService.getSurvey(surveyId)
+
+      if (!surveyData) {
         setError('Survey not found or no longer active')
         return
       }
 
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('survey_questions')
-        .select('*')
-        .eq('survey_id', surveyId)
-        .order('order_index')
+      // Check if this survey has a quiz associated with it
+      if (surveyData.category === 'quiz') {
+        console.log('🔍 Survey is actually a quiz, checking for associated quiz...')
+        try {
+          const { data: associatedQuiz } = await supabase
+            .from('quizzes')
+            .select('*')
+            .eq('survey_id', surveyId)
+            .eq('is_active', true)
+            .single()
 
-      if (questionsError) {
-        setError('Failed to load survey questions')
-        return
+          if (associatedQuiz) {
+            console.log('✅ Found associated quiz, redirecting to quiz page...')
+            router.push(`/quiz/${associatedQuiz.id}`)
+            return
+          }
+        } catch (quizCheckError) {
+          console.log('🔍 No quiz found for this survey, proceeding with survey view')
+        }
+      }
+
+      // Validate creator wallet silently
+      if (!surveyData.creator_wallet || surveyData.creator_wallet.length !== 44) {
+        console.warn('⚠️ Survey creator_wallet appears invalid')
       }
 
       setSurvey(surveyData)
-      setQuestions(questionsData || [])
+      setQuestions(surveyData.survey_questions || [])
       
-      // Check if current user is the creator
-      console.log('🔍 Creator check:', {
-        publicKey: publicKey ? publicKey.toString() : 'null',
-        creatorWallet: surveyData.creator_wallet,
-        isCreator: publicKey && surveyData.creator_wallet === publicKey.toString()
-      })
-      if (publicKey && surveyData.creator_wallet === publicKey.toString()) {
-        setIsCreator(true)
-        console.log('✅ User is the survey creator')
-      } else {
-        console.log('❌ User is not the survey creator')
+      // Check if this is a special survey (whitelist-only)
+      const { data: specialSurveyData, error: specialSurveyError } = await supabase
+        .from('special_surveys')
+        .select('quiz_id')
+        .eq('survey_id', surveyData.id)
+        .maybeSingle()
+
+      if (specialSurveyData && !specialSurveyError) {
+        setIsSpecialSurvey(true)
+        setRequiredQuizId(specialSurveyData.quiz_id)
+        
+        // Check whitelist status if user is connected
+        if (publicKey) {
+          const whitelist = await QuizService.getWhitelistStatus(publicKey.toString(), specialSurveyData.quiz_id)
+          setWhitelistStatus(whitelist)
+        }
       }
       
-      // Debug: Log questions to see their types
-      console.log('🔍 Loaded questions:', questionsData)
-      questionsData?.forEach((q, index) => {
-        console.log(`Question ${index + 1}:`, {
-          id: q.question_id,
-          text: q.question_text,
-          type: q.question_type,
-          options: q.options
-        })
-      })
+      // Check if this is a quiz - redirect to quiz page
+      if (surveyData.category === 'quiz') {
+        console.log('🔄 Survey is a quiz, redirecting to quiz page')
+        router.push(`/quiz/${surveyId}`)
+        return
+      }
+
+      setIsQuiz(false)
+      
+      // Questions loaded successfully
     } catch (err) {
       console.error('Error loading survey:', err)
       setError('Failed to load survey')
@@ -123,12 +163,14 @@ export default function SurveyResponsePage() {
   }
 
   const checkIfResponded = async () => {
-    if (!publicKey) return
+    if (!publicKey || !connected) return
 
     try {
+      // Wait for wallet state to stabilize
+      await new Promise(resolve => setTimeout(resolve, 300))
+
       const surveyService = new SurveyService()
       const hasResponded = await surveyService.hasUserResponded(surveyId, publicKey.toString())
-      console.log('🔍 Response check result:', hasResponded)
       setHasResponded(hasResponded)
     } catch (err) {
       console.error('Error checking response status:', err)
@@ -167,7 +209,7 @@ export default function SurveyResponsePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!connected || !publicKey) {
-      setError('Please connect your Phantom wallet to submit responses')
+      setError(`Please connect your Phantom wallet to ${survey?.category === 'quiz' ? 'take this quiz' : 'submit a response'}`)
       return
     }
 
@@ -250,22 +292,26 @@ export default function SurveyResponsePage() {
 
       const result = await surveyService.submitResponse(surveyId, responsesArray)
 
-      setSuccess(`✅ Response submitted successfully! Transaction: ${result.transactionSignature.substring(0, 8)}...`)
-      
+      setSuccess(`✅ ${survey?.category === 'quiz' ? 'Quiz completed' : 'Response submitted'} successfully! Transaction: ${result.transactionSignature.substring(0, 8)}...`)
+
       // Update the hasResponded state to show the user has responded
       setHasResponded(true)
-      
+
       // Clear the form
       setResponses({})
-      
-      // Don't redirect - let the user stay on the page to see the success message
-      // and potentially view responses if they're the creator
+
+      // Re-check response status in case cleanup occurred
+      setTimeout(() => {
+        if (publicKey) {
+          checkIfResponded()
+        }
+      }, 1000)
 
     } catch (err: any) {
       console.error('Error submitting response:', err)
 
       if (err.message?.includes('already responded') || err.message?.includes('duplicate')) {
-        setError('You have already responded to this survey. Each wallet can only submit one response per survey.')
+        setError(`You have already ${survey?.category === 'quiz' ? 'taken this quiz' : 'responded to this survey'}. Each wallet can only ${survey?.category === 'quiz' ? 'take the quiz once' : 'submit one response per survey'}.`)
         setHasResponded(true) // Update the state to show the user has responded
       } else if (err.message?.includes('User rejected') || err.message?.includes('cancelled')) {
         setError('Transaction was cancelled. Please try again and approve the transaction.')
@@ -318,8 +364,12 @@ export default function SurveyResponsePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-purple-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className={`min-h-screen py-4 sm:py-8 ${
+      isQuiz 
+        ? 'bg-gradient-to-br from-orange-50 to-red-50' 
+        : 'bg-gradient-to-br from-slate-50 to-purple-50'
+    }`}>
+      <div className={`mx-auto px-4 sm:px-6 lg:px-8 ${isMobile ? 'max-w-full' : 'max-w-4xl'}`}>
         {/* Header */}
         <div className="mb-8">
           <Link
@@ -330,17 +380,47 @@ export default function SurveyResponsePage() {
             Back to Surveys
           </Link>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className={`rounded-lg shadow-sm border p-6 ${
+            isQuiz 
+              ? 'bg-gradient-to-r from-orange-100 to-red-100 border-orange-200' 
+              : 'bg-white border-gray-200'
+          }`}>
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{survey.title}</h1>
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-3xl font-bold text-gray-900">{survey.title}</h1>
+                  {isQuiz && (
+                    <span className="px-3 py-1 bg-orange-500 text-white rounded-full text-sm font-medium">
+                      🧠 QUIZ
+                    </span>
+                  )}
+                </div>
                 <p className="text-gray-600 mb-4">{survey.description}</p>
 
                 <div className="flex items-center gap-4 text-sm text-gray-500">
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full">
+                  <span className={`px-3 py-1 rounded-full ${
+                    isQuiz 
+                      ? 'bg-orange-100 text-orange-800' 
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
                     {survey.category}
                   </span>
                   <span>{survey.question_count} questions</span>
+                  {isQuiz && quizData && (
+                    <>
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">
+                        {quizData.total_points} points
+                      </span>
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                        Min: {quizData.minimum_score}%
+                      </span>
+                      {quizData.max_attempts > 1 && (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                          {quizData.max_attempts} attempts
+                        </span>
+                      )}
+                    </>
+                  )}
                   <span>
                     {survey.response_count || 0}
                     {survey.max_responses ? ` / ${survey.max_responses}` : ''} responses
@@ -360,27 +440,36 @@ export default function SurveyResponsePage() {
 
                 {/* Creator Actions */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="text-sm text-gray-500 mb-2">
-                    Debug: isCreator = {isCreator ? 'true' : 'false'}, publicKey = {publicKey ? publicKey.toString() : 'null'}
-                  </div>
-                  <div className="text-xs text-gray-400 mb-2">
-                    Creator Wallet: {survey.creator_wallet}
-                  </div>
                   {isCreator && (
-                    <Link
-                      href={`/surveys/${surveyId}/responses`}
-                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      View Responses ({survey.response_count || 0})
-                    </Link>
+                    <div className="text-sm text-green-600 bg-green-50 p-3 rounded-lg mb-4">
+                      <div className="font-medium">✨ This is your survey</div>
+                      <div className="text-xs mt-1">
+                        You can view responses and manage this survey.
+                      </div>
+                    </div>
+                  )}
+                  {isCreator && (
+                    <div className="flex gap-3">
+                      <Link
+                        href={isSpecialSurvey ? `/surveys/${surveyId}/special-responses` : `/surveys/${surveyId}/responses`}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        View Responses ({survey.response_count || 0})
+                      </Link>
+                      {isSpecialSurvey && (
+                        <div className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm">
+                          <Award className="w-4 h-4 inline mr-1" />
+                          Special Survey
+                        </div>
+                      )}
+                    </div>
                   )}
                   {!isCreator && publicKey && (
                     <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
-                      <div className="font-medium">Wallet Connected but Not Creator</div>
+                      <div className="font-medium">Access Restricted</div>
                       <div className="text-xs mt-1">
-                        Your wallet: {publicKey.toString()}<br/>
-                        Creator wallet: {survey.creator_wallet}
+                        You don't have permission to view responses for this survey.
                       </div>
                     </div>
                   )}
@@ -421,7 +510,7 @@ export default function SurveyResponsePage() {
               <CheckCircle className="w-6 h-6 text-yellow-600" />
               <div>
                 <h3 className="font-medium text-yellow-800">Already Responded</h3>
-                <p className="text-yellow-700 text-sm">You have already submitted a response to this survey.</p>
+                <p className="text-yellow-700 text-sm">You have already {survey?.category === 'quiz' ? 'taken this quiz' : 'submitted a response to this survey'}.</p>
               </div>
             </div>
           </div>
@@ -433,8 +522,8 @@ export default function SurveyResponsePage() {
             <div className="flex items-center gap-3">
               <AlertCircle className="w-6 h-6 text-red-600" />
               <div>
-                <h3 className="font-medium text-red-800">Survey Full</h3>
-                <p className="text-red-700 text-sm">This survey has reached its maximum number of responses and is no longer accepting new submissions.</p>
+                <h3 className="font-medium text-red-800">{survey?.category === 'quiz' ? 'Quiz Full' : 'Survey Full'}</h3>
+                <p className="text-red-700 text-sm">This {survey?.category === 'quiz' ? 'quiz' : 'survey'} has reached its maximum number of {survey?.category === 'quiz' ? 'attempts' : 'responses'} and is no longer accepting new submissions.</p>
               </div>
             </div>
           </div>
@@ -455,11 +544,51 @@ export default function SurveyResponsePage() {
           </div>
         )}
 
+        {/* Whitelist Access Check */}
+        {isSpecialSurvey && !isCreator && (
+          <div className="mb-8">
+            {whitelistStatus ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div className="flex items-center gap-3">
+                  <Award className="w-8 h-8 text-green-600" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-800">Access Granted!</h3>
+                    <p className="text-green-700">
+                      You're whitelisted for this exclusive survey. Score: {whitelistStatus.percentage.toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-6">
+                <div className="flex items-center gap-3">
+                  <Lock className="w-8 h-8 text-orange-600" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-orange-800">Exclusive Survey</h3>
+                    <p className="text-orange-700 mb-3">
+                      This survey is only available to users who have passed the required quiz.
+                    </p>
+                    {requiredQuizId && (
+                      <Link
+                        href={`/quiz/${requiredQuizId}`}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                      >
+                        <Award className="w-4 h-4" />
+                        Take Required Quiz
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Survey Form */}
-        {!hasResponded && (
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {!hasResponded && (!isSpecialSurvey || isCreator || whitelistStatus) && (
+          <form onSubmit={handleSubmit} className={`space-y-4 sm:space-y-6 ${isMobile ? 'pb-20' : ''}`}>
             {questions.map((question) => (
-              <div key={question.question_id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 relative">
+              <div key={question.question_id} className={`bg-white rounded-lg shadow-sm border border-gray-200 ${isMobile ? 'p-4' : 'p-6'} relative`}>
                 {/* Purple check mark for answered questions */}
                 {responses[question.question_id] && (
                   <div className="absolute top-4 right-4 w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
@@ -538,7 +667,7 @@ export default function SurveyResponsePage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900">Ready to Submit?</h3>
+                  <h3 className="text-lg font-medium text-gray-900">Ready to {survey?.category === 'quiz' ? 'Take Quiz' : 'Submit'}?</h3>
                   <p className="text-gray-600 mt-1">
                     Your response will be encrypted and processed using Arcium MPC technology.
                   </p>
@@ -556,7 +685,7 @@ export default function SurveyResponsePage() {
                 <button
                   type="submit"
                   disabled={submitting || !connected || isSurveyFull}
-                  className="flex items-center gap-2 px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  className={`flex items-center gap-2 ${isMobile ? 'w-full justify-center px-6 py-4 text-lg' : 'px-8 py-3'} bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium`}
                 >
                   {submitting ? (
                     <>
@@ -576,7 +705,7 @@ export default function SurveyResponsePage() {
                   ) : (
                     <>
                       <Send className="w-5 h-5" />
-                      Submit Response
+                      {survey?.category === 'quiz' ? 'Take Quiz' : 'Take Survey'}
                     </>
                   )}
                 </button>
@@ -591,7 +720,7 @@ export default function SurveyResponsePage() {
             <CheckCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Connect Your Wallet</h2>
             <p className="text-gray-600 mb-6">
-              Connect your Phantom wallet to submit responses to this survey.
+              Connect your Phantom wallet to {survey?.category === 'quiz' ? 'take this quiz' : 'submit a response to this survey'}.
             </p>
             <WalletButtonWrapper className="!bg-purple-600 hover:!bg-purple-700 !text-white !border-0 !rounded-lg !font-medium !px-6 !py-3" />
           </div>

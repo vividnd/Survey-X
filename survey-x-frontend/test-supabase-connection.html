@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Connection Test</title>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        async function testConnection() {
+            results.innerHTML = '<p>Testing Supabase connection...</p>';
+            
+            try {
+                // Test 1: Basic fetch
+                const response = await fetch('https://nlfzwmlrvlegybnsmnvb.supabase.co/rest/v1/', {
+                    method: 'GET',
+                    headers: {
+                        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sZnp3bWxydmxlZ3libnNtbnZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwMTUzNzMsImV4cCI6MjA3MjU5MTM3M30.aQgvv57U2nK5AqurVxdGV19h2dyoeyTd7m5HaFYRv6I',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                results.innerHTML += `<p>✅ Basic fetch: ${response.status} ${response.statusText}</p>`;
+                
+                // Test 2: Supabase client test
+                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+                const supabase = createClient(
+                    'https://nlfzwmlrvlegybnsmnvb.supabase.co',
+                    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sZnp3bWxydmxlZ3libnNtbnZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwMTUzNzMsImV4cCI6MjA3MjU5MTM3M30.aQgvv57U2nK5AqurVxdGV19h2dyoeyTd7m5HaFYRv6I'
+                );
+                
+                const { data, error } = await supabase.from('surveys').select('count').limit(1);
+                
+                if (error) {
+                    results.innerHTML += `<p>❌ Supabase client error: ${error.message}</p>`;
+                } else {
+                    results.innerHTML += `<p>✅ Supabase client works: ${JSON.stringify(data)}</p>`;
+                }
+                
+            } catch (error) {
+                results.innerHTML += `<p>❌ Connection failed: ${error.message}</p>`;
+                
+                // Check for CORS
+                if (error.message.includes('CORS')) {
+                    results.innerHTML += '<p>🔍 CORS error detected - try disabling browser extensions</p>';
+                }
+                
+                // Check for network
+                if (error.message.includes('fetch')) {
+                    results.innerHTML += '<p>🔍 Network error - check internet connection</p>';
+                }
+            }
+        }
+        
+        testConnection();
+    </script>
+</body>
+</html>

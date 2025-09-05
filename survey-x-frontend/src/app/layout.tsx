@@ -4,6 +4,7 @@ import './globals.css'
 import WalletProvider from '@/components/WalletProvider'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import '@/lib/suppressWalletErrors' // Suppress wallet extension errors
 
 const inter = Inter({ subsets: ['latin'] })
 

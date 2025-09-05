@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { Plus, X, Save, AlertCircle, CheckCircle, Wallet } from 'lucide-react'
 import { SurveyService } from '@/lib/surveyService'
 import { PublicKey } from '@solana/web3.js'
+import TemplateSelector from '@/components/TemplateSelector'
+import { SurveyTemplate } from '@/lib/surveyTemplates'
 
 
 interface Question {
@@ -46,6 +48,30 @@ export default function CreateSurveyPage() {
       required: true
     }
   ])
+  const [showTemplateSelector, setShowTemplateSelector] = useState(true)
+
+  const handleTemplateSelect = (template: SurveyTemplate) => {
+    setTitle(template.name)
+    setDescription(template.description)
+    setCategory(template.category.toLowerCase())
+    setHashtags(template.hashtags.join(', '))
+    setMaxResponses(template.maxResponses)
+    
+    const templateQuestions: Question[] = template.questions.map((q, index) => ({
+      id: (index + 1).toString(),
+      question_text: q.question_text,
+      question_type: q.question_type,
+      options: q.options || [''],
+      required: q.required
+    }))
+    
+    setQuestions(templateQuestions)
+    setShowTemplateSelector(false)
+  }
+
+  const handleStartBlank = () => {
+    setShowTemplateSelector(false)
+  }
 
   const addQuestion = () => {
     const newQuestion: Question = {
@@ -201,7 +227,7 @@ export default function CreateSurveyPage() {
 
       // Create wallet interface for SurveyService
       const walletInterface = {
-        publicKey: publicKey, // This will be updated to the connected wallet
+        publicKey: window.solana.publicKey, // Use the connected Phantom wallet
         signTransaction: async (transaction: any) => {
           console.log('🔐 Requesting transaction signature from Phantom...')
           
@@ -362,11 +388,17 @@ Would you like to test your survey by answering it yourself?`)
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Create Survey</h1>
-          <p className="text-gray-600 mt-2">Create a privacy-preserving survey with encrypted responses</p>
-        </div>
+      {showTemplateSelector ? (
+        <TemplateSelector 
+          onSelectTemplate={handleTemplateSelect}
+          onStartBlank={handleStartBlank}
+        />
+      ) : (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Create Survey</h1>
+            <p className="text-gray-600 mt-2">Create a privacy-preserving survey with encrypted responses</p>
+          </div>
 
         {/* Error/Success Messages */}
         {error && (
@@ -439,18 +471,6 @@ Would you like to test your survey by answering it yourself?`)
               </div>
             </div>
 
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 placeholder-gray-500 bg-white"
-                placeholder="Describe your survey..."
-              />
-            </div>
 
             <div className="mt-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -663,7 +683,8 @@ Would you like to test your survey by answering it yourself?`)
             </div>
           </div>
         </form>
-      </div>
+        </div>
+      )}
     </div>
   )
 }
