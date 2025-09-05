@@ -179,16 +179,17 @@ export default function SurveyResponsesPage() {
       })
       
       // Debug: Log each response's response_data
-      responsesData?.forEach((response, index) => {
-        console.log(`Response ${index + 1}:`, {
-          id: response.id,
-          response_id: response.response_id,
-          responder_wallet: response.responder_wallet,
-          response_data: response.response_data,
-          response_data_type: typeof response.response_data,
-          response_data_length: response.response_data ? response.response_data.length : 'null'
-        })
+          responsesData?.forEach((response, index) => {
+      console.log(`Response ${index + 1}:`, {
+        id: response.id,
+        response_id: response.response_id,
+        responder_wallet: response.responder_wallet,
+        response_data: response.response_data,
+        response_data_type: typeof response.response_data,
+        response_data_length: response.response_data ? response.response_data.length : 'null',
+        full_response_object: response // Log the entire response object for debugging
       })
+    })
 
     } catch (err) {
       console.error('Error loading survey data:', err)

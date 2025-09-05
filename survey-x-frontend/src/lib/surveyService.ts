@@ -598,6 +598,15 @@ export class SurveyService {
 
       // Save response to Supabase
       console.log('📝 Saving response to Supabase...')
+      console.log('📊 Response data to store:', {
+        survey_id: surveyId,
+        response_id: responseId,
+        responder_wallet: this.wallet.publicKey.toString(),
+        response_data: responses,
+        response_data_type: typeof responses,
+        response_data_length: responses ? responses.length : 'null'
+      })
+      
       const { error: responseError } = await supabase
         .from('survey_responses')
         .insert({
