@@ -191,4 +191,4 @@ MIT License - see LICENSE file for details.
 ---
 
 **Live Demo**: Deploy to see it in action!
-**Support**: Create an issue for bugs or feature requests.
+**Support**: Create an issue for bugs or feature requests.# Force Vercel rebuild - Fri Sep  5 04:50:58 WAT 2025
