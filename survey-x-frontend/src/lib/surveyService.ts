@@ -341,7 +341,7 @@ export class SurveyService {
           .insert({
             title: surveyData.title,
             description: surveyData.description,
-            creator_wallet: this.wallet.publicKey.toString(),
+            creator_wallet: this.wallet.publicKey!.toString(),
             survey_id: surveyId,
             category: surveyData.category,
             hashtags: surveyData.hashtags,
