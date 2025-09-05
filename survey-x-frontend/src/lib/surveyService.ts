@@ -605,6 +605,7 @@ export class SurveyService {
           response_id: responseId,
           responder_wallet: this.wallet.publicKey.toString(),
           encrypted_data: encryptedResponseData,
+          response_data: responses, // Store actual response data for creators to view
           submitted_at: new Date().toISOString()
         })
 

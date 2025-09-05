@@ -296,20 +296,19 @@ export default function SurveyResponsesPage() {
           </div>
         </div>
 
-        {/* Encryption Notice */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        {/* Response Notice */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-blue-600 text-lg">🔐</span>
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <span className="text-green-600 text-lg">📊</span>
               </div>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">Encrypted Responses</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                All survey responses are encrypted using Arcium MPC (Multi-Party Computation) for maximum privacy. 
-                The actual answers are stored securely on-chain and require MPC decryption to view. 
-                Click "Decrypt" buttons to decrypt individual answers (feature coming soon).
+              <h3 className="text-sm font-medium text-green-800">Survey Responses</h3>
+              <p className="text-sm text-green-700 mt-1">
+                As the survey creator, you can view all submitted responses. Each column shows the answer to the corresponding question. 
+                Responses are also encrypted using Arcium MPC for additional privacy protection.
               </p>
             </div>
           </div>
@@ -403,24 +402,37 @@ export default function SurveyResponsesPage() {
                           'N/A'
                         )}
                       </td>
-                      {questions.map((question, index) => (
-                        <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                              🔐 Encrypted
-                            </span>
-                            <button
-                              className="text-blue-600 hover:text-blue-700 text-xs"
-                              onClick={() => {
-                                // TODO: Implement response decryption using Arcium MPC
-                                alert(`Decrypting answer for: "${question.question_text}"\n\nThis requires Arcium MPC decryption which will be implemented in a future update.`)
-                              }}
-                            >
-                              Decrypt
-                            </button>
-                          </div>
-                        </td>
-                      ))}
+                      {questions.map((question, index) => {
+                        // Get the response for this question
+                        const questionResponse = response.response_data && response.response_data[index] 
+                          ? response.response_data[index] 
+                          : null;
+                        
+                        return (
+                          <td key={index} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div className="max-w-xs">
+                              {questionResponse ? (
+                                <div className="space-y-1">
+                                  <div className="font-medium text-gray-900">
+                                    {questionResponse.answer || questionResponse.value || 'No answer'}
+                                  </div>
+                                  {questionResponse.answer && questionResponse.value && questionResponse.answer !== questionResponse.value && (
+                                    <div className="text-xs text-gray-500">
+                                      Value: {questionResponse.value}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                                    No Data
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <button
                           className="text-blue-600 hover:text-blue-700"
