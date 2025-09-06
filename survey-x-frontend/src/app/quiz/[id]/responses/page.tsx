@@ -228,6 +228,12 @@ export default function QuizResponsesPage() {
 
                     <div className="flex items-center gap-4">
                       <div className="text-right">
+                        <div className="flex items-center gap-1 text-gray-600 mb-1">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-sm">
+                            {formatDate(attempt.created_at)}
+                          </span>
+                        </div>
                         <div className={`text-xl font-bold ${getScoreColor(attempt.percentage)}`}>
                           {attempt.percentage.toFixed(1)}%
                         </div>
@@ -236,12 +242,6 @@ export default function QuizResponsesPage() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-1 text-gray-600">
-                          <Clock className="w-4 h-4" />
-                          <span className="text-sm">
-                            {formatDate(attempt.created_at)}
-                          </span>
-                        </div>
                         <div className="text-sm text-gray-600">
                           {attempt.is_passed ? 'Passed' : 'Failed'}
                         </div>

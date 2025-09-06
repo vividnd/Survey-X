@@ -162,8 +162,9 @@ export default function TemplateSelector({ onSelectTemplate, onStartBlank }: Tem
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <button
           onClick={onStartBlank}
-          className="flex items-center justify-center px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors"
+          className="flex items-center justify-center px-8 py-4 border-2 border-blue-500 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 hover:border-blue-600 transition-all duration-200 shadow-md hover:shadow-lg bg-white"
         >
+          <Plus className="w-5 h-5 mr-3" />
           Start from Scratch
         </button>
         

@@ -120,13 +120,13 @@ export default function SpecialSurveysPage() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
+              <Link
+                href={`/quiz/${quizId}/create-special-survey`}
                 className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Create Special Survey
-              </button>
+              </Link>
             </div>
           </div>
         </div>

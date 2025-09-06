@@ -230,6 +230,10 @@ export default function QuizCreator({ onQuizCreated }: QuizCreatorProps) {
       }
 
       setSuccess('Quiz created successfully!')
+
+      // Wait a moment for the quiz to be fully indexed
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
       if (onQuizCreated) {
         onQuizCreated(createdQuiz)
       } else {

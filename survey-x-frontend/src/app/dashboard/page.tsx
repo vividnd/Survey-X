@@ -82,6 +82,7 @@ export default function DashboardPage() {
 
   // Browse tab state
   const [surveys, setSurveys] = useState<any[]>([])
+  const [respondedSurveys, setRespondedSurveys] = useState<Set<string>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'responses'>('recent')
@@ -123,8 +124,40 @@ export default function DashboardPage() {
         limit: 50
       })
       setSurveys(surveysData)
+
+      // Check which surveys the user has already responded to
+      if (connected && publicKey && surveysData.length > 0) {
+        await checkRespondedSurveys(surveysData)
+      }
     } catch (err) {
       console.error('Failed to load browse data:', err)
+    }
+  }
+
+  const checkRespondedSurveys = async (surveysData: any[]) => {
+    if (!publicKey) return
+
+    try {
+      const surveyService = new SurveyService()
+      const respondedSet = new Set<string>()
+
+      // Check each survey in parallel for better performance
+      const responseChecks = surveysData.map(async (survey) => {
+        try {
+          const hasResponded = await surveyService.hasUserResponded(survey.survey_id, publicKey.toString())
+          if (hasResponded) {
+            respondedSet.add(survey.survey_id)
+          }
+        } catch (err) {
+          // If check fails, assume not responded
+          console.warn(`Failed to check response status for survey ${survey.survey_id}:`, err)
+        }
+      })
+
+      await Promise.all(responseChecks)
+      setRespondedSurveys(respondedSet)
+    } catch (err) {
+      console.error('Failed to check responded surveys:', err)
     }
   }
 
@@ -411,12 +444,19 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <Link
-                    href={`/surveys/${survey.survey_id}`}
-                    className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    {survey.category === 'quiz' ? 'Take Quiz' : 'Take Survey'}
-                  </Link>
+                  {respondedSurveys.has(survey.survey_id) ? (
+                    <div className="w-full flex items-center justify-center px-4 py-2 bg-green-100 text-green-800 rounded-lg border border-green-200">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Already Completed
+                    </div>
+                  ) : (
+                    <Link
+                      href={`/surveys/${survey.survey_id}`}
+                      className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      {survey.category === 'quiz' ? 'Take Quiz' : 'Take Survey'}
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>
